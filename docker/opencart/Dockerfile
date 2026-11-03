@@ -3,6 +3,12 @@ FROM php:7.4-apache
 ARG OPENCART_VERSION=3.0.3.8
 
 RUN set -eux; \
+    # PHP 7.4 uses Debian 11; its packages have moved to Debian's signed archive. \
+    printf '%s\n' \
+        'deb [check-valid-until=no] http://archive.debian.org/debian bullseye main' \
+        'deb [check-valid-until=no] http://archive.debian.org/debian-security bullseye-security main' \
+        > /etc/apt/sources.list; \
+    rm -rf /var/lib/apt/lists/*; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
         ca-certificates \

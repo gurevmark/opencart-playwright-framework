@@ -1,5 +1,7 @@
 # Local OpenCart containers
 
+The course's OpenCart 3.0.3.8 runtime remains on PHP 7.4 for compatibility. Its Debian 11 package sources now use the official Debian archive so fresh CI builds can download packages after Bullseye's retirement. Expiry checks are disabled only for the archived source metadata; package signature verification remains enabled. A PHP/OpenCart runtime upgrade is a separate change. See [Debian's archive](https://www.debian.org/distrib/archive) and [Bullseye LTS dates](https://wiki.debian.org/LTS/Bullseye).
+
 The root `docker-compose.yml` manages the existing `framework1-opencart` Compose project. Its project name preserves the existing `framework1-opencart_opencart_database` and `framework1-opencart_opencart_files` named volumes. The storefront is at http://localhost/opencart/upload/.
 
 From the project root, use `docker compose ps` to inspect the services, `docker compose stop` to stop them, and `docker compose start` to start existing containers. `docker compose up -d` can create or recreate containers; review configuration and volume names before using it. Never use `docker compose down --volumes` if the current data must be preserved.
