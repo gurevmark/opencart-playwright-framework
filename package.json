@@ -1,0 +1,24 @@
+{
+  "name": "section-8---ai-and-frameworks",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {},
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@faker-js/faker": "^10.6.0",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.6.5",
+    "ajv": "^8.20.0",
+    "allure-playwright": "^3.14.0",
+    "csv-parse": "^7.0.3",
+    "dotenv": "^18.0.9",
+    "luxon": "^3.7.2",
+    "mysql2": "^3.24.6",
+    "xlsx": "^0.18.5"
+  }
+}

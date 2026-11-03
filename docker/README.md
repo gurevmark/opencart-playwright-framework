@@ -1,0 +1,21 @@
+# Local OpenCart containers
+
+The root `docker-compose.yml` manages the existing `framework1-opencart` Compose project. Its project name preserves the existing `framework1-opencart_opencart_database` and `framework1-opencart_opencart_files` named volumes. The storefront is at http://localhost/opencart/upload/.
+
+From the project root, use `docker compose ps` to inspect the services, `docker compose stop` to stop them, and `docker compose start` to start existing containers. `docker compose up -d` can create or recreate containers; review configuration and volume names before using it. Never use `docker compose down --volumes` if the current data must be preserved.
+
+On OpenCart startup, the entrypoint can install into an empty database, write configuration files, remove the installer, and create a test customer if absent. Review `opencart/entrypoint.sh` and its helper scripts before recreating or starting the service when these changes are not wanted.
+
+Compose reads the root `.env`. Container settings use `OPENCART_` overrides when supplied, otherwise they inherit the framework's `DB_`, `APP_`, and `ADMIN_` settings. There are no usable password defaults. MySQL is published on `127.0.0.1` at `DB_PORT` (default `3306`) so host-side tests can reach it. The database health check authenticates as the application account and executes `SELECT 1`.
+
+For a new database volume, also supply `OPENCART_DB_ROOT_PASSWORD` in your ignored local environment. MySQL requires this initialization password; it is separate from `DB_PASSWORD`. The OpenCart startup helpers require supplied database, administrator, and test-customer credentials before changing files or data. The installer email defaults to the synthetic `admin@example.test`.
+
+For host-side tests, set `DB_HOST=127.0.0.1` and configure `DB_USER`, `DB_PASSWORD`, and `DB_NAME` in `.env` for an existing MySQL account. Updating a MySQL container's environment variables does not change accounts/passwords already stored in its volume. Preserve the application's working credentials unless intentionally rotating them.
+
+GitHub Actions creates a separate stack and passes credentials through process environment variables, without a `.env` file. See [GitHub Actions setup](../docs/CI.md) for the complete Secrets/Variables list. Do not run CI cleanup commands against this local project.
+
+After changing the port mapping, `docker compose up -d --no-deps database` recreates only the database container and retains its named volume. Wait for its health check before running the headless database journey:
+
+```sh
+npx --no-install playwright test tests/db/customer-registration.spec.ts --grep @db --project=chromium
+```

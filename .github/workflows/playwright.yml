@@ -1,0 +1,137 @@
+name: Playwright Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      test_suite:
+        description: Select test suite
+        type: choice
+        options:
+          - test:master
+          - test:sanity
+          - test:regression
+          - test:e2e
+          - test:api
+          - test:web
+          - test:db
+          - test:datadriven
+        default: test:e2e
+      browser:
+        description: Select browser (headless)
+        type: choice
+        options: [chromium, firefox, webkit]
+        default: chromium
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # Fork and Dependabot code must never run in a job with repository secrets.
+    if: >-
+      github.actor != 'dependabot[bot]' &&
+      (github.event_name != 'pull_request' ||
+        (github.event.pull_request.head.repo.full_name == github.repository &&
+         github.event.pull_request.user.login != 'dependabot[bot]'))
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    env:
+      CI: 'true'
+      APP_ENV: qa
+      COMPOSE_PROJECT_NAME: opencart-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      TEST_SUITE: ${{ inputs.test_suite || 'test:e2e' }}
+      TEST_BROWSER: ${{ inputs.browser || 'chromium' }}
+      WEB_APP_URL: http://localhost:8080/opencart/upload/
+      DB_HOST: 127.0.0.1
+      DB_PORT: '3306'
+      DB_NAME: ${{ vars.DB_NAME }}
+      DB_USER: ${{ vars.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      APP_EMAIL: ${{ secrets.APP_EMAIL }}
+      APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+      ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
+      ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+      PRODUCT_NAME: ${{ vars.PRODUCT_NAME }}
+      PRODUCT_QUANTITY: ${{ vars.PRODUCT_QUANTITY }}
+      TOTAL_PRICE: ${{ vars.TOTAL_PRICE }}
+      API_BASE_URL: ${{ vars.API_BASE_URL }}
+      USERNAME: ${{ secrets.USERNAME }}
+      PASSWORD: ${{ secrets.PASSWORD }}
+      USER_ID: ${{ vars.USER_ID }}
+      PRODUCT_ID: ${{ vars.PRODUCT_ID }}
+      CART_ID: ${{ vars.CART_ID }}
+      LIMIT: ${{ vars.LIMIT }}
+      START_DATE: ${{ vars.START_DATE }}
+      END_DATE: ${{ vars.END_DATE }}
+      # Compose and Playwright must initialize and test the same accounts.
+      OPENCART_PORT: '8080'
+      OPENCART_HTTP_SERVER: http://localhost:8080/opencart/upload/
+      OPENCART_DB_NAME: ${{ vars.DB_NAME }}
+      OPENCART_DB_USER: ${{ vars.DB_USER }}
+      OPENCART_DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      OPENCART_DB_ROOT_PASSWORD: ${{ secrets.OPENCART_DB_ROOT_PASSWORD }}
+      OPENCART_TEST_EMAIL: ${{ secrets.APP_EMAIL }}
+      OPENCART_TEST_PASSWORD: ${{ secrets.APP_PASSWORD }}
+      OPENCART_ADMIN_USER: ${{ secrets.ADMIN_USERNAME }}
+      OPENCART_ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+      OPENCART_ADMIN_EMAIL: admin@example.test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: lts/*
+          check-latest: true
+          cache: npm
+
+      - name: Validate required configuration
+        id: validate
+        run: node scripts/ci/validate-env.mjs
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check configuration validation
+        run: node --test scripts/ci/validate-env.test.mjs
+
+      - name: Install Playwright browsers
+        run: npx --no-install playwright install --with-deps
+
+      - name: Start fresh OpenCart and MySQL
+        id: stack
+        run: docker compose --project-name "$COMPOSE_PROJECT_NAME" up --build --wait --wait-timeout 300
+
+      - name: Run Playwright tests
+        id: tests
+        run: bash scripts/ci/run-tests.sh "$TEST_SUITE" "$TEST_BROWSER"
+
+      - name: Upload HTML and JUnit reports
+        if: ${{ !cancelled() && (steps.tests.outcome == 'success' || steps.tests.outcome == 'failure') }}
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: playwright-report
+          path: reports/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload Allure results
+        if: ${{ !cancelled() && (steps.tests.outcome == 'success' || steps.tests.outcome == 'failure') }}
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: allure-results
+          path: allure-results/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Remove this run's containers and volumes
+        if: ${{ always() && steps.validate.outcome == 'success' }}
+        run: docker compose --project-name "$COMPOSE_PROJECT_NAME" down --volumes --remove-orphans

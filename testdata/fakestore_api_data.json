@@ -1,0 +1,119 @@
+{
+  "category": "electronics",
+  "sortOrders": [
+    "asc",
+    "desc"
+  ],
+  "invalidLogin": {
+    "username": "invalid-fakestore-user",
+    "password": "invalid-fakestore-password"
+  },
+  "product": {
+    "title": "API test backpack",
+    "price": 24.5,
+    "description": "Deterministic API test product",
+    "image": "https://example.com/backpack.png",
+    "category": "electronics"
+  },
+  "productUpdate": {
+    "title": "Updated API test backpack",
+    "price": 29.5,
+    "description": "Updated deterministic API test product",
+    "image": "https://example.com/backpack.png",
+    "category": "electronics"
+  },
+  "user": {
+    "email": "api-test@example.com",
+    "username": "api-test-user",
+    "name": {
+      "firstname": "Test",
+      "lastname": "User"
+    },
+    "address": {
+      "city": "Test City",
+      "street": "Test Street",
+      "number": 12,
+      "zipcode": "12345",
+      "geolocation": {
+        "lat": "32.0",
+        "long": "34.0"
+      }
+    },
+    "phone": "123-456-7890"
+  },
+  "userUpdate": {
+    "email": "api-updated@example.com",
+    "username": "api-updated-user",
+    "name": {
+      "firstname": "Updated",
+      "lastname": "User"
+    },
+    "address": {
+      "city": "Updated City",
+      "street": "Test Street",
+      "number": 14,
+      "zipcode": "12345",
+      "geolocation": {
+        "lat": "32.0",
+        "long": "34.0"
+      }
+    },
+    "phone": "123-456-7891"
+  },
+  "cart": {
+    "quantity": 2,
+    "updatedQuantity": 4
+  },
+  "additionalCoverage": {
+    "limitCases": [
+      {
+        "name": "one record",
+        "limit": 1,
+        "returnsAll": false
+      },
+      {
+        "name": "zero means unlimited",
+        "limit": 0,
+        "returnsAll": true
+      },
+      {
+        "name": "larger than catalogue",
+        "limit": 1000,
+        "returnsAll": true
+      }
+    ],
+    "combinedLimit": 3,
+    "missingResourceId": 999999,
+    "encodedCategories": [
+      "men's clothing",
+      "women's clothing"
+    ],
+    "unknownCategory": "unknown-api-category",
+    "dateRanges": [
+      {
+        "name": "inclusive single day",
+        "startDate": "2020-01-01",
+        "endDate": "2020-01-01",
+        "expectedIds": [
+          4
+        ]
+      },
+      {
+        "name": "empty interval",
+        "startDate": "2020-01-03",
+        "endDate": "2020-02-29",
+        "expectedIds": []
+      }
+    ],
+    "cartProducts": [
+      {
+        "productId": 1,
+        "quantity": 2
+      },
+      {
+        "productId": 2,
+        "quantity": 3
+      }
+    ]
+  }
+}

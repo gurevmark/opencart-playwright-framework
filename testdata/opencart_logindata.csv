@@ -1,0 +1,3 @@
+testName,email,password,expected
+Valid login,${APP_EMAIL},${APP_PASSWORD},success
+Invalid login,abcxyz@xyz.com,abcxyx,failure

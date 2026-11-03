@@ -1,0 +1,58 @@
+name: framework1-opencart
+
+services:
+  database:
+    image: mysql:8.0
+    command: --sql-mode=NO_ENGINE_SUBSTITUTION
+    environment:
+      MYSQL_DATABASE: ${OPENCART_DB_NAME:-${DB_NAME:-openshop}}
+      MYSQL_USER: ${OPENCART_DB_USER:-${DB_USER:-}}
+      MYSQL_PASSWORD: ${OPENCART_DB_PASSWORD:-${DB_PASSWORD:-}}
+      MYSQL_ROOT_PASSWORD: ${OPENCART_DB_ROOT_PASSWORD:-}
+    ports:
+      - "127.0.0.1:${DB_PORT:-3306}:3306"
+    volumes:
+      - opencart_database:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", 'MYSQL_PWD="$${MYSQL_PASSWORD}" mysql --host=127.0.0.1 --user="$${MYSQL_USER}" --database="$${MYSQL_DATABASE}" --execute="SELECT 1" --silent']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  opencart:
+    build:
+      context: ./docker/opencart
+      args:
+        OPENCART_VERSION: 3.0.3.8
+    environment:
+      DB_HOST: database
+      DB_PORT: 3306
+      DB_NAME: ${OPENCART_DB_NAME:-${DB_NAME:-openshop}}
+      DB_USER: ${OPENCART_DB_USER:-${DB_USER:-}}
+      DB_PASSWORD: ${OPENCART_DB_PASSWORD:-${DB_PASSWORD:-}}
+      DB_PREFIX: oc_
+      OPENCART_HTTP_SERVER: ${OPENCART_HTTP_SERVER:-http://localhost/opencart/upload/}
+      OPENCART_ADMIN_USER: ${OPENCART_ADMIN_USER:-${ADMIN_USERNAME:-}}
+      OPENCART_ADMIN_PASSWORD: ${OPENCART_ADMIN_PASSWORD:-${ADMIN_PASSWORD:-}}
+      OPENCART_ADMIN_EMAIL: ${OPENCART_ADMIN_EMAIL:-admin@example.test}
+      OPENCART_TEST_EMAIL: ${OPENCART_TEST_EMAIL:-${APP_EMAIL:-}}
+      OPENCART_TEST_PASSWORD: ${OPENCART_TEST_PASSWORD:-${APP_PASSWORD:-}}
+    ports:
+      - "${OPENCART_PORT:-80}:80"
+    volumes:
+      - opencart_files:/var/www/html/opencart
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://localhost/opencart/upload/"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  opencart_database:
+  opencart_files:
