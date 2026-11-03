@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-suite="${1:-test:e2e}"
+suite="${1:-test:opencart}"
 browser="${2:-chromium}"
 if (( $# >= 2 )); then shift 2; else set --; fi
 
 case "$suite" in
+  test:opencart) tag='(web|db)' ;;
   test:master) tag=master ;;
   test:sanity) tag=sanity ;;
   test:regression) tag=regression ;;
@@ -22,6 +23,6 @@ case "$browser" in
   *) echo 'Unsupported browser.' >&2; exit 2 ;;
 esac
 
-# Keep the configured reporters. Extra CLI arguments support local --list checks.
+# Keep the configured reporters. Extra arguments support test paths and --list.
 exec npx --no-install playwright test --grep "@$tag(\\s|$)" \
   --project="$browser" --output=test-results "$@"

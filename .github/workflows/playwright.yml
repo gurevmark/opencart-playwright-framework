@@ -1,4 +1,4 @@
-name: Playwright Tests
+name: OpenCart Web and DB Tests
 
 on:
   push:
@@ -8,18 +8,17 @@ on:
   workflow_dispatch:
     inputs:
       test_suite:
-        description: Select test suite
+        description: Select OpenCart test suite
         type: choice
         options:
-          - test:master
+          - test:opencart
           - test:sanity
           - test:regression
           - test:e2e
-          - test:api
           - test:web
           - test:db
           - test:datadriven
-        default: test:e2e
+        default: test:opencart
       browser:
         description: Select browser (headless)
         type: choice
@@ -43,7 +42,7 @@ jobs:
       CI: 'true'
       APP_ENV: qa
       COMPOSE_PROJECT_NAME: opencart-ci-${{ github.run_id }}-${{ github.run_attempt }}
-      TEST_SUITE: ${{ inputs.test_suite || 'test:e2e' }}
+      TEST_SUITE: ${{ inputs.test_suite || 'test:opencart' }}
       TEST_BROWSER: ${{ inputs.browser || 'chromium' }}
       WEB_APP_URL: http://localhost:8080/opencart/upload/
       DB_HOST: 127.0.0.1
@@ -58,15 +57,6 @@ jobs:
       PRODUCT_NAME: ${{ vars.PRODUCT_NAME }}
       PRODUCT_QUANTITY: ${{ vars.PRODUCT_QUANTITY }}
       TOTAL_PRICE: ${{ vars.TOTAL_PRICE }}
-      API_BASE_URL: ${{ vars.API_BASE_URL }}
-      USERNAME: ${{ secrets.USERNAME }}
-      PASSWORD: ${{ secrets.PASSWORD }}
-      USER_ID: ${{ vars.USER_ID }}
-      PRODUCT_ID: ${{ vars.PRODUCT_ID }}
-      CART_ID: ${{ vars.CART_ID }}
-      LIMIT: ${{ vars.LIMIT }}
-      START_DATE: ${{ vars.START_DATE }}
-      END_DATE: ${{ vars.END_DATE }}
       # Compose and Playwright must initialize and test the same accounts.
       OPENCART_PORT: '8080'
       OPENCART_HTTP_SERVER: http://localhost:8080/opencart/upload/
@@ -110,9 +100,10 @@ jobs:
         id: stack
         run: docker compose --project-name "$COMPOSE_PROJECT_NAME" up --build --wait --wait-timeout 300
 
-      - name: Run Playwright tests
+      - name: Run OpenCart web and database tests
         id: tests
-        run: bash scripts/ci/run-tests.sh "$TEST_SUITE" "$TEST_BROWSER"
+        # Limit discovery too: API modules must not require settings in this job.
+        run: bash scripts/ci/run-tests.sh "$TEST_SUITE" "$TEST_BROWSER" tests/web tests/db
 
       - name: Upload HTML and JUnit reports
         if: ${{ !cancelled() && (steps.tests.outcome == 'success' || steps.tests.outcome == 'failure') }}

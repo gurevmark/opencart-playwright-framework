@@ -11,11 +11,16 @@ scenarios 35–43 in `prompts/fakestore_api_test_prompts.md`: 36 original cases 
 | `users.spec.ts` | 16 | 13–19, 30, 33, 36–38 | Lists, ID, limit boundaries, sorting with limits, missing ID, CRUD, schema, workflow |
 | `carts.spec.ts` | 23 | 20–28, 31, 34, 36–38, 41–43 | Lists, ID, date boundaries, owner/missing owner, limit boundaries, sorting with limits, missing ID, multiple products, CRUD, schema, workflow |
 
-Run once using an existing project (API requests do not launch a browser):
+Run locally from the project root (API requests do not launch a browser):
 
 ```sh
-npx --no-install playwright test tests/api --project=chromium --grep @api
+bash scripts/ci/run-tests.sh test:api chromium
 ```
+
+The hosted GitHub workflow runs the 27 OpenCart web/database tests. This live API
+suite is kept separate because FakeStore returned Cloudflare HTTP 403 challenge
+pages to GitHub's hosted runner, including on public endpoints. Its assertions
+remain unchanged. See [CI setup](../../docs/CI.md) for the coverage split.
 
 Tags: `@master`, `@api`, `@sanity` for login/list smoke tests, `@regression`
 for other tests, `@datadriven` for parameterized additional cases, and
