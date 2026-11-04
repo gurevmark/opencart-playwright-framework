@@ -11,6 +11,7 @@ node_modules/
 .env
 .env.*
 !.env.example
+/.docker-local/
 /reports/
 /custom-report/
 /allure-results/

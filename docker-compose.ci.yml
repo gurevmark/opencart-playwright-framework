@@ -1,5 +1,10 @@
-# Add to the existing Compose file explicitly; normal local Compose stays two services.
+# Shared application overlay for CI and the explicit local full-stack replica.
+# Add to the base file explicitly; normal local Compose stays two services.
 services:
+  opencart:
+    environment:
+      OPENCART_INTERNAL_HTTP_SERVER: http://opencart/opencart/upload/
+
   fakestore-database:
     image: mongo:9.0.4
     environment:

@@ -81,9 +81,13 @@ GitHub Actions supplies these additional repository secrets:
 | `FAKESTORE_MONGO_PASSWORD` | MongoDB application account password |
 | `FAKESTORE_MONGO_ROOT_PASSWORD` | Separate MongoDB initialization/root password |
 
-The workflow fixes `API_BASE_URL=http://127.0.0.1:6400`, IDs 1, limit 3, and dates
+The workflow fixes `API_BASE_URL=http://fakestore:6400`, IDs 1, limit 3, and dates
 `2020-01-01` through `2020-03-02`. Existing public FakeStore repository settings are
 unused. The local `.env` and the default two-service Compose setup are unchanged.
+
+Container tests reach the API by service DNS on the project's bridge network.
+The local full-stack helper publishes `127.0.0.1:16406` for access from the Mac;
+this published port is separate from the test container's internal port 6400.
 
 CI builds and waits for all four services, runs this service's four integration
 checks using `docker compose ... exec -T fakestore npm test`, then runs the selected

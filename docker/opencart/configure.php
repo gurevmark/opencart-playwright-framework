@@ -3,6 +3,9 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/environment.php';
+// Generate internal service-DNS links for container requests and public links
+// for the Mac browser from the same storefront/admin configuration.
+require_once __DIR__ . '/http-server.php';
 
 function environment(string $name, string $default): string
 {
@@ -16,8 +19,17 @@ function definition(string $name, string $value): string
     return "define('{$name}', " . var_export($value, true) . ");\n";
 }
 
+function serverDefinition(string $name, string $publicServer, string $internalServer, string $suffix = ''): string
+{
+    return "define('{$name}', " . httpServerExpression($publicServer, $internalServer, $suffix) . ");\n";
+}
+
 $root = '/var/www/html/opencart/upload/';
 $httpServer = rtrim(environment('OPENCART_HTTP_SERVER', 'http://localhost/opencart/upload/'), '/') . '/';
+$internalHttpServer = environment('OPENCART_INTERNAL_HTTP_SERVER', '');
+if ($internalHttpServer !== '') {
+    $internalHttpServer = rtrim($internalHttpServer, '/') . '/';
+}
 $dbHost = environment('DB_HOST', 'database');
 $dbUser = requiredEnvironment('DB_USER');
 $dbPassword = requiredEnvironment('DB_PASSWORD');
@@ -35,9 +47,9 @@ $database = "// DB\n"
     . definition('DB_PREFIX', $dbPrefix);
 
 $catalog = "<?php\n// HTTP\n"
-    . definition('HTTP_SERVER', $httpServer)
+    . serverDefinition('HTTP_SERVER', $httpServer, $internalHttpServer)
     . "\n// HTTPS\n"
-    . definition('HTTPS_SERVER', $httpServer)
+    . serverDefinition('HTTPS_SERVER', $httpServer, $internalHttpServer)
     . "\n// DIR\n"
     . definition('DIR_APPLICATION', $root . 'catalog/')
     . definition('DIR_SYSTEM', $root . 'system/')
@@ -55,11 +67,11 @@ $catalog = "<?php\n// HTTP\n"
     . $database;
 
 $admin = "<?php\n// HTTP\n"
-    . definition('HTTP_SERVER', $httpServer . 'admin/')
-    . definition('HTTP_CATALOG', $httpServer)
+    . serverDefinition('HTTP_SERVER', $httpServer, $internalHttpServer, 'admin/')
+    . serverDefinition('HTTP_CATALOG', $httpServer, $internalHttpServer)
     . "\n// HTTPS\n"
-    . definition('HTTPS_SERVER', $httpServer . 'admin/')
-    . definition('HTTPS_CATALOG', $httpServer)
+    . serverDefinition('HTTPS_SERVER', $httpServer, $internalHttpServer, 'admin/')
+    . serverDefinition('HTTPS_CATALOG', $httpServer, $internalHttpServer)
     . "\n// DIR\n"
     . definition('DIR_APPLICATION', $root . 'admin/')
     . definition('DIR_SYSTEM', $root . 'system/')

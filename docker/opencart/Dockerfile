@@ -34,7 +34,7 @@ RUN set -eux; \
     mkdir -p /var/www/html/opencart
 
 COPY apache.conf /etc/apache2/conf-available/opencart.conf
-COPY environment.php configure.php database-state.php seed-customer.php /usr/local/lib/opencart/
+COPY environment.php http-server.php http-server.test.php configure.php database-state.php seed-customer.php /usr/local/lib/opencart/
 COPY --chmod=755 entrypoint.sh /usr/local/bin/opencart-entrypoint
 
 RUN a2enconf opencart
