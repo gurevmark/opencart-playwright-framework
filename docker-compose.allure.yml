@@ -1,0 +1,24 @@
+# Standalone local reporting stack. Do not merge with the application/CI stack.
+name: opencart-allure
+
+services:
+  allure:
+    image: frankescobar/allure-docker-service:2.44.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5051:5050"
+    environment:
+      CHECK_RESULTS_EVERY_SECONDS: "NONE"
+      KEEP_HISTORY: "1"
+      KEEP_HISTORY_LATEST: "20"
+    volumes:
+      - ./allure-results:/app/projects/host/results
+      - ./allure-report/host:/app/projects/host/reports
+      - ./allure-results/local-docker:/app/projects/local-docker/results
+      - ./allure-report/local-docker:/app/projects/local-docker/reports
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "3", "http://localhost:5050/allure-docker-service/version"]
+      interval: 5s
+      timeout: 5s
+      start_period: 10s
+      retries: 12

@@ -3,7 +3,14 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "scripts": {},
+  "scripts": {
+    "allure:up": "node scripts/allure.mjs up",
+    "allure:generate": "node scripts/allure.mjs generate",
+    "allure:open": "node scripts/allure.mjs open",
+    "allure:status": "node scripts/allure.mjs status",
+    "allure:stop": "node scripts/allure.mjs stop",
+    "allure:down": "node scripts/allure.mjs down"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
