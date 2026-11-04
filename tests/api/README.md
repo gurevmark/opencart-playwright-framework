@@ -1,5 +1,8 @@
 # FakeStore API coverage
 
+[Documentation index](../../docs/README.md) · [Testing commands](../../docs/TESTING.md)
+· [Configuration](../../docs/CONFIGURATION.md)
+
 67 independent tests implement the original 34 prompts and the extended regression
 scenarios 35–43 in `prompts/fakestore_api_test_prompts.md`: 36 original cases plus
 31 additional cases.
@@ -18,10 +21,11 @@ bash scripts/ci/run-tests.sh test:api chromium
 ```
 
 In GitHub CI, the same 67 assertions target a controlled MongoDB-backed FakeStore
-compatibility fork at `http://127.0.0.1:6400`, alongside the 27 OpenCart/database
-tests. Public FakeStore requests were challenged by Cloudflare from the hosted
-runner. Local API runs still use the public endpoint from `.env`; controlled CI
-results do not establish public service availability. See [CI setup](../../docs/CI.md)
+compatibility fork at `http://fakestore:6400` inside the Compose network, alongside
+the 27 OpenCart/database tests. Public FakeStore requests were challenged by
+Cloudflare from the hosted runner. Host-side runs target the configured
+`API_BASE_URL` or public fallback; the local Docker helper targets the controlled
+service. Controlled results do not establish public service availability. See [CI setup](../../docs/CI.md)
 and [the controlled service notes](../../docker/fakestore/README.md).
 
 Tags: `@master`, `@api`, `@sanity` for login/list smoke tests, `@regression`
@@ -67,6 +71,11 @@ Live response contracts verified during implementation:
   users/carts. An unknown category or cart owner returns an empty array.
 - The single-day cart fixture requires a real match and checks inclusive boundaries;
   a separate empty-interval fixture verifies an empty array exactly.
+
+## Historical validation
+
+These results describe the dated implementation run, not current public-service
+availability. Use a fresh run against the configured target for current status.
 
 Validation on 2026-11-03: all 67 tests passed against the configured live API with
 two workers using the existing `chromium` project (no browser was launched).
