@@ -1,159 +1,150 @@
 # GitHub Actions setup
 
-The workflow runs the **27 OpenCart web/database tests** headlessly against a new
-OpenCart/MySQL stack on an Ubuntu GitHub-hosted runner. The **67 live FakeStore API
-tests run locally**, using the separate command below. Hosted CI does not claim
-coverage of the public FakeStore service.
+Automatic CI runs **all 94 Playwright scenarios** headlessly on an Ubuntu
+GitHub-hosted runner: **27 OpenCart web/database tests** and **67 FakeStore API
+tests against a controlled compatibility fork**. The API result describes the
+controlled service, not the public `https://fakestoreapi.com` deployment.
 
-It uses repository-level configuration; a GitHub Environment is not required.
-It runs on pushes and pull requests targeting `main`, and can also be started from
-**Actions → OpenCart Web and DB Tests → Run workflow**. Fork pull requests and
-Dependabot runs skip the secret-dependent job.
+The runner installs Node/Playwright and starts four Docker containers:
+
+| Application | Database | Runner-side address |
+| --- | --- | --- |
+| OpenCart | MySQL | `http://localhost:8080/opencart/upload/`; MySQL `127.0.0.1:3306` |
+| Controlled FakeStore API | MongoDB | `http://127.0.0.1:6400`; MongoDB has no published port |
+
+The base `docker-compose.yml` remains the existing two-service local setup.
+CI explicitly adds `docker-compose.ci.yml`. Your local `.env` continues to select
+the public FakeStore API for local API runs.
+
+The workflow runs on pushes and pull requests targeting `main`, and from
+**Actions → Playwright Web, API and DB Tests → Run workflow**. Fork pull requests
+and Dependabot runs skip the secret-dependent job. A GitHub Environment is not
+required; configuration is repository-scoped.
 
 ## Repository secrets
 
-In **Settings → Secrets and variables → Actions → Secrets**, create these names.
-Supply dedicated CI credentials; do not reuse your local OpenCart/database passwords.
-No secret values belong in source files, this document, or `.env.example`.
+Under **Settings → Secrets and variables → Actions → Secrets**, configure the
+following names with dedicated CI values. Never put values in tracked files or
+`.env.example`. Existing public FakeStore secrets named `USERNAME`/`PASSWORD` are
+not used by this workflow and do not need to be changed.
 
 | Secret | Purpose |
 | --- | --- |
-| `APP_EMAIL` | CI customer email; startup creates this account in the fresh database |
-| `APP_PASSWORD` | CI customer password |
-| `ADMIN_USERNAME` | Administrator username installed in the fresh OpenCart database |
-| `ADMIN_PASSWORD` | Administrator password |
-| `DB_PASSWORD` | Password for the non-root MySQL application/test account |
-| `OPENCART_DB_ROOT_PASSWORD` | Separate MySQL root password, used for database initialization |
+| `APP_EMAIL` | Customer created in the fresh OpenCart database |
+| `APP_PASSWORD` | OpenCart customer password |
+| `ADMIN_USERNAME` | OpenCart administrator username |
+| `ADMIN_PASSWORD` | OpenCart administrator password |
+| `DB_PASSWORD` | MySQL application/test account password |
+| `OPENCART_DB_ROOT_PASSWORD` | Separate MySQL initialization/root password |
+| `FAKESTORE_CI_USERNAME` | Dedicated synthetic FakeStore user 1 login |
+| `FAKESTORE_CI_PASSWORD` | Synthetic FakeStore user 1 password |
+| `FAKESTORE_JWT_SECRET` | Random JWT signing key, at least 32 bytes |
+| `FAKESTORE_MONGO_PASSWORD` | MongoDB application account password |
+| `FAKESTORE_MONGO_ROOT_PASSWORD` | Separate MongoDB initialization/root password |
 
-## Repository variables
+The MongoDB application account has `readWrite` only on the fixture database;
+the API does not receive the MongoDB root password. All application passwords
+are runtime inputs rather than image build arguments.
 
-In the **Variables** tab, add these five names. These example values are
-non-sensitive OpenCart test configuration.
+## Repository variables and fixed settings
+
+These five repository Variables configure OpenCart:
 
 | Variable | Suggested value |
 | --- | --- |
-| `DB_USER` | `opencart_test` (must not be `root`) |
+| `DB_USER` | `opencart_test` (not root) |
 | `DB_NAME` | `openshop` |
 | `PRODUCT_NAME` | `MacBook` |
 | `PRODUCT_QUANTITY` | `1` |
 | `TOTAL_PRICE` | `$602.00` |
 
-The workflow fixes `DB_HOST=127.0.0.1`, `DB_PORT=3306`, and
-`WEB_APP_URL=http://localhost:8080/opencart/upload/` on the runner. OpenCart inside
-Docker connects to `database:3306`. The installer uses a synthetic administrator
-email, `admin@example.test`, with no real inbox requirement.
+The workflow fixes the controlled API URL to `http://127.0.0.1:6400`, product/user/
+cart IDs to 1, limit to 3, and dates to `2020-01-01` through `2020-03-02`, matching
+the versioned synthetic dataset. Former public-API repository Variables are unused.
+The API login maps from `FAKESTORE_CI_USERNAME`/`FAKESTORE_CI_PASSWORD` Secrets into
+`USERNAME`/`PASSWORD` for Playwright and into `API_USERNAME`/`API_PASSWORD` for the
+API container, so startup and tests use the same account.
 
-GitHub variables and secrets are explicitly mapped into the job's process
-environment. There is no CI `.env` copy or generated `.env` file. The validation
-step stops before dependency installation or container startup when a required
-setting is missing or blank, reporting names only.
+OpenCart similarly maps `DB_*` to container settings, `APP_*` to
+`OPENCART_TEST_*`, and `ADMIN_*` to `OPENCART_ADMIN_*`. Its installer uses a synthetic
+administrator email, `admin@example.test`. CI never creates or copies a `.env` file.
 
-## Container and suite behavior
+## Startup, selection, reports, and cleanup
 
-CI maps `DB_*` into Compose's `OPENCART_DB_*`, `APP_*` into `OPENCART_TEST_*`, and
-`ADMIN_*` into `OPENCART_ADMIN_*`. Both tests and container initialization therefore
-use the same accounts. Passwords are runtime environment inputs, not image build
-arguments. The successful JSON login case reads `APP_EMAIL` and `APP_PASSWORD`;
-the JSON/CSV/Excel examples contain environment references and retain their
-synthetic failure rows.
+Validation runs with `node scripts/ci/validate-env.mjs --with-api`, failing with
+missing configuration names only. Docker builds both applications and waits up to
+300 seconds after the build for all four service health checks. The API connects
+to authenticated MongoDB and seeds a new fixture database before becoming healthy.
+See [the controlled API notes](../docker/fakestore/README.md) for upstream provenance,
+compatibility changes, and seeding rules.
 
-Each CI job uses a unique `opencart-ci-<run>-<attempt>` Compose project and fresh
-volumes. Startup waits for database and storefront health checks, with a
-300-second wait limit after the image build. Cleanup removes only that CI project.
-Your laptop's existing project and volumes are independent.
+CI first runs four service integration checks: real JWT signature/expiration,
+simulated writes preserving MongoDB data, restricted database access, and repeatable
+initialization that rejects changed credentials. Then Playwright runs the selected
+suite with its existing assertions, browser configuration, and reporters.
 
-Manual suite choices map to tags as follows:
-
-| Choice | Tag |
+| Suite | Tag / coverage |
 | --- | --- |
-| `test:opencart` | `@web` or `@db` (all 27 OpenCart tests; default) |
+| `test:master` | `@master`; all 94 scenarios (automatic/manual default) |
+| `test:opencart` | `@web` or `@db`; 27 OpenCart/database scenarios |
+| `test:api` | `@api`; 67 controlled FakeStore scenarios |
 | `test:sanity` | `@sanity` |
 | `test:regression` | `@regression` |
 | `test:e2e` | `@end-to-end` |
-| `test:web` | `@web` (also includes browser-based DB journeys) |
+| `test:web` | `@web`, including browser-based DB journeys |
 | `test:db` | `@db` |
 | `test:datadriven` | `@datadriven` |
 
-Automatic runs default to `test:opencart` in Chromium. Manual runs also offer
-Firefox and WebKit. Every hosted selection is restricted to `tests/web` and
-`tests/db`, including discovery, so broad tags such as `@regression` never collect
-the external API tests. Suite selection belongs to the command, with no global
-config filter. FakeStore credentials and variables are not injected into the job
-or required by CI validation.
+Automatic runs use Chromium. Manual runs also offer Firefox and WebKit. Tags are
+selected on the command rather than through a global Playwright filter. Full CI
+always provisions the complete stack, including when a smaller suite is selected.
 
-## Local FakeStore API checks
+Configured reporters produce HTML/JUnit under `reports/` and Allure results under
+`allure-results/`. CI uploads both after successful or failed Playwright runs,
+with seven-day retention. Reports/traces can contain submitted CI credentials and
+synthetic data; GitHub log masking does not sanitize artifact contents. Restrict
+artifact access appropriately and use only dedicated disposable test identities.
 
-Run the 67 live API tests from the project root:
+Every run uses an `opencart-ci-<run>-<attempt>` Compose project with fresh volumes.
+Cleanup uses both Compose files and removes only that run's project and volumes.
+It must never be run against the existing local `framework1-opencart` project.
+
+## Local use
+
+Local OpenCart tests continue using the existing containers and ignored `.env`.
+Local API tests continue using the public API and the existing FakeStore demo-user
+configuration in that file:
 
 ```sh
 bash scripts/ci/run-tests.sh test:api chromium
 ```
 
-These use Playwright's request fixture and do not launch a browser or need the
-OpenCart containers. Configure the following in the ignored local `.env`:
-`API_BASE_URL`, `USERNAME`, `PASSWORD`, `USER_ID`, `PRODUCT_ID`, `CART_ID`, `LIMIT`,
-`START_DATE`, and `END_DATE`. See [the API notes](../tests/api/README.md) for the
-existing-user requirement and fixture data. `USERNAME` and `PASSWORD` are the
-FakeStore login, separate from the OpenCart accounts.
+This selects 67 API tests without launching a browser. The local API URL, username,
+password, IDs, limit, and date range come from the local environment. The CI-only
+MongoDB and JWT settings are not required for these public API runs.
 
-The local runner also retains `test:master` for all 94 tests. Neither `test:master`
-nor `test:api` is offered by the hosted workflow. Previously configured FakeStore
-repository settings remain unused by the OpenCart CI job.
-
-This split follows [the hosted run](https://github.com/gurevmark/opencart-playwright-framework/actions/runs/41710064983),
-where the 27 OpenCart/database tests passed and all 67 public FakeStore API tests
-received HTTP 403. A trace confirmed a Cloudflare challenge (`cf-mitigated:
-challenge`) even for an unauthenticated products request. API assertions remain
-intact; local API results are separate from the hosted OpenCart CI result.
-
-The configured reporters create HTML and JUnit output in `reports/` and raw Allure
-results in `allure-results/`. CI uploads both directories after a successful or
-failed test run, with seven-day retention. It does not upload a custom report
-while that reporter is disabled. Reports/traces may contain submitted test data;
-GitHub log masking does not sanitize artifact contents. Use CI-only credentials
-and review artifact access when sharing results.
-
-The workflow uses stable action releases verified on 2026-11-03:
-[checkout v7.0.1](https://github.com/actions/checkout/releases/tag/v7.0.1),
-[setup-node v7.1.0](https://github.com/actions/setup-node/releases/tag/v7.1.0), and
-[upload-artifact v7.0.2](https://github.com/actions/upload-artifact/releases/tag/v7.0.2).
-They run on the hosted Ubuntu runner; Node uses the latest LTS. Application/test
-dependency versions remain governed by the existing lockfile and `npm ci`.
-
-## Local checks and first push
-
-Local tests still load your ignored `.env`. See [the Docker notes](../docker/README.md)
-before starting or recreating any existing containers. CI configuration must not
-rotate passwords or reset data in your local volumes.
+For discovery or configuration checks:
 
 ```sh
 node --test scripts/ci/validate-env.test.mjs
-bash scripts/ci/run-tests.sh test:opencart chromium tests/web tests/db --list
+bash scripts/ci/run-tests.sh test:master chromium --list
 ```
 
-Before the first push, initialize the intended repository with `main`, confirm
-that `.env` and generated reports/browser sessions are ignored, and review all
-staged filenames and the staged diff locally. The lockfile must be included.
-`.gitignore` does not remove a secret that has already been committed; any such
-credential needs rotation and history cleanup before publication.
+The root lockfile remains committed, and the controlled service has its own
+committed npm lockfile. The existing stable action versions are checkout 7.0.1,
+setup-node 7.1.0, and upload-artifact 7.0.2. Runtime/library versions and provenance
+for the new service are listed in its README.
 
-GitHub references: [secrets](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets),
-[variables](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-variables),
-and [environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments).
+## Evidence and limits
 
-## Initial local acceptance evidence (2026-11-03, before publication)
+The [original hosted full-suite run](https://github.com/gurevmark/opencart-playwright-framework/actions/runs/41710064983)
+passed 27 OpenCart/database tests while all 67 public FakeStore requests were
+challenged by Cloudflare (HTTP 403 with `cf-mitigated: challenge`). The temporary
+OpenCart-only workflow subsequently passed. The controlled API removes that public
+network dependency from CI; it does not establish public FakeStore availability.
 
-- `npm ci` succeeded in a temporary project copy with no `.env`; the original lockfile stayed unchanged.
-- A fresh image and isolated OpenCart/MySQL stack built and became healthy using throwaway acceptance credentials, separate from the fixed secrets required in GitHub.
-- All 94 Chromium scenarios passed across two executions: 68 API/database checks passed initially; 26 UI checks hit a macOS sandbox browser-launch restriction, then all 26 passed headlessly outside that sandbox. This included customer login, administrator login, and the environment-backed JSON login row.
-- All eight suite selectors discovered tests; Firefox/WebKit end-to-end discovery also passed. Their browser suites were not executed.
-- An intentional failing test produced HTML, a JUnit failure testcase, and Allure results with the existing reporter configuration.
-- Actionlint 1.7.12, three configuration-validation tests, and PHP/shell syntax checks passed. Independent review found one remaining credential example in a prompt; it was removed and the targeted credential scan then passed.
-- A temporary Git index confirmed that `.env`, generated reports, and local browser sessions are excluded, while `.env.example` and the lockfile are included. No actual repository, commit, or push was created.
-- The original local `.env` and the existing OpenCart/MySQL containers were preserved. Acceptance cleanup targets only its temporary Compose project.
-
-These describe the initial local acceptance stage. Subsequent hosted execution,
-report uploads, cleanup, and the reason for separating live FakeStore checks are
-recorded above. `npm ci` also reported an existing high-severity `xlsx` advisory
-with no registry fix available; dependency versions were not changed in this CI
-work.
+Local acceptance on 2026-11-04 used a separate four-container project, synthetic
+runtime credentials, no `.env` in the worktree, and all 94 existing framework
+scenarios passed. Four additional service integration checks and five configuration
+validation checks passed. The original local `.env`, root lockfile, and existing
+OpenCart/MySQL containers were preserved.

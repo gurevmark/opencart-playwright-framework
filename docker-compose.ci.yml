@@ -1,0 +1,44 @@
+# Add to the existing Compose file explicitly; normal local Compose stays two services.
+services:
+  fakestore-database:
+    image: mongo:9.0.4
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ci-root
+      MONGO_INITDB_ROOT_PASSWORD: ${FAKESTORE_MONGO_ROOT_PASSWORD:?Configure FAKESTORE_MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: fakestore
+      FAKESTORE_MONGO_PASSWORD: ${FAKESTORE_MONGO_PASSWORD:?Configure FAKESTORE_MONGO_PASSWORD}
+    volumes:
+      - fakestore_database:/data/db
+      - ./docker/fakestore/mongo-init.js:/docker-entrypoint-initdb.d/10-fakestore-user.js:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.getSiblingDB('admin').auth(process.env.MONGO_INITDB_ROOT_USERNAME, process.env.MONGO_INITDB_ROOT_PASSWORD); quit(db.adminCommand({ping:1}).ok === 1 ? 0 : 1)"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+
+  fakestore:
+    build:
+      context: ./docker/fakestore
+    environment:
+      PORT: 6400
+      MONGODB_URI: mongodb://fakestore-database:27017/fakestore
+      MONGODB_USER: fakestore
+      MONGODB_PASSWORD: ${FAKESTORE_MONGO_PASSWORD:?Configure FAKESTORE_MONGO_PASSWORD}
+      API_USERNAME: ${USERNAME:?Configure USERNAME for the controlled CI API}
+      API_PASSWORD: ${PASSWORD:?Configure PASSWORD for the controlled CI API}
+      JWT_SECRET: ${FAKESTORE_JWT_SECRET:?Configure FAKESTORE_JWT_SECRET}
+    ports:
+      - "127.0.0.1:${FAKESTORE_PORT:-6400}:6400"
+    depends_on:
+      fakestore-database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:6400/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+volumes:
+  fakestore_database:

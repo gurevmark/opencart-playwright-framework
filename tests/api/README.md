@@ -17,17 +17,19 @@ Run locally from the project root (API requests do not launch a browser):
 bash scripts/ci/run-tests.sh test:api chromium
 ```
 
-The hosted GitHub workflow runs the 27 OpenCart web/database tests. This live API
-suite is kept separate because FakeStore returned Cloudflare HTTP 403 challenge
-pages to GitHub's hosted runner, including on public endpoints. Its assertions
-remain unchanged. See [CI setup](../../docs/CI.md) for the coverage split.
+In GitHub CI, the same 67 assertions target a controlled MongoDB-backed FakeStore
+compatibility fork at `http://127.0.0.1:6400`, alongside the 27 OpenCart/database
+tests. Public FakeStore requests were challenged by Cloudflare from the hosted
+runner. Local API runs still use the public endpoint from `.env`; controlled CI
+results do not establish public service availability. See [CI setup](../../docs/CI.md)
+and [the controlled service notes](../../docker/fakestore/README.md).
 
 Tags: `@master`, `@api`, `@sanity` for login/list smoke tests, `@regression`
 for other tests, `@datadriven` for parameterized additional cases, and
 `@end-to-end` for the three workflows.
 Each workflow executes its steps inside one test, so it needs no cross-test serial dependency.
 
-Configuration reuses `.env`: `API_BASE_URL`, `USERNAME`, `PASSWORD`, `PRODUCT_ID`,
+Local public-API configuration reuses `.env`: `API_BASE_URL`, `USERNAME`, `PASSWORD`, `PRODUCT_ID`,
 `USER_ID`, `CART_ID`, `LIMIT`, `START_DATE`, and `END_DATE`.
 `USERNAME` and `PASSWORD` must belong to an existing FakeStore demo user. Arbitrary
 credentials or a user returned by `POST /users` cannot be used to log in, because
@@ -39,7 +41,8 @@ on returned records, use a range covering the demo carts (for example,
 The deterministic payloads and filter values live in `testdata/fakestore_api_data.json`.
 Its `additionalCoverage` section holds limit boundaries, missing IDs, category names,
 date intervals with expected IDs, and two-product cart payloads. These fixtures
-target FakeStore's demo dataset; update them when targeting a different dataset.
+target the public demo contracts. The controlled CI seed supplies equivalent
+category, ID, and date-boundary prerequisites; its data is explicitly synthetic.
 The user write payloads reuse the configured API password without putting it in the data file.
 Routes, all three existing schemas, AJV, and `DataProvider` are reused.
 The specific prompt's deterministic-data requirement takes precedence over the generic

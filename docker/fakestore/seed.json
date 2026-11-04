@@ -1,0 +1,245 @@
+{
+  "products": [
+    {
+      "id": 1,
+      "title": "Synthetic product 1",
+      "price": 10.0,
+      "description": "Controlled CI fixture",
+      "category": "electronics",
+      "image": "https://example.test/product-1.png",
+      "rating": {
+        "rate": 4.0,
+        "count": 1
+      }
+    },
+    {
+      "id": 2,
+      "title": "Synthetic product 2",
+      "price": 20.0,
+      "description": "Controlled CI fixture",
+      "category": "men's clothing",
+      "image": "https://example.test/product-2.png",
+      "rating": {
+        "rate": 4.0,
+        "count": 2
+      }
+    },
+    {
+      "id": 3,
+      "title": "Synthetic product 3",
+      "price": 30.0,
+      "description": "Controlled CI fixture",
+      "category": "women's clothing",
+      "image": "https://example.test/product-3.png",
+      "rating": {
+        "rate": 4.0,
+        "count": 3
+      }
+    },
+    {
+      "id": 4,
+      "title": "Synthetic product 4",
+      "price": 40.0,
+      "description": "Controlled CI fixture",
+      "category": "jewelery",
+      "image": "https://example.test/product-4.png",
+      "rating": {
+        "rate": 4.0,
+        "count": 4
+      }
+    },
+    {
+      "id": 5,
+      "title": "Synthetic product 5",
+      "price": 50.0,
+      "description": "Controlled CI fixture",
+      "category": "electronics",
+      "image": "https://example.test/product-5.png",
+      "rating": {
+        "rate": 4.0,
+        "count": 5
+      }
+    },
+    {
+      "id": 6,
+      "title": "Synthetic product 6",
+      "price": 60.0,
+      "description": "Controlled CI fixture",
+      "category": "men's clothing",
+      "image": "https://example.test/product-6.png",
+      "rating": {
+        "rate": 4.0,
+        "count": 6
+      }
+    }
+  ],
+  "users": [
+    {
+      "id": 1,
+      "email": "fixture-1@example.test",
+      "username": "fixture-user-1",
+      "name": {
+        "firstname": "Fixture",
+        "lastname": "User 1"
+      },
+      "address": {
+        "city": "Fixture City",
+        "street": "Fixture Street",
+        "number": 1,
+        "zipcode": "00000",
+        "geolocation": {
+          "lat": "32.0",
+          "long": "34.0"
+        }
+      },
+      "phone": "000-000-0000",
+      "__v": 0
+    },
+    {
+      "id": 2,
+      "email": "fixture-2@example.test",
+      "username": "fixture-user-2",
+      "name": {
+        "firstname": "Fixture",
+        "lastname": "User 2"
+      },
+      "address": {
+        "city": "Fixture City",
+        "street": "Fixture Street",
+        "number": 2,
+        "zipcode": "00000",
+        "geolocation": {
+          "lat": "32.0",
+          "long": "34.0"
+        }
+      },
+      "phone": "000-000-0000",
+      "__v": 0
+    },
+    {
+      "id": 3,
+      "email": "fixture-3@example.test",
+      "username": "fixture-user-3",
+      "name": {
+        "firstname": "Fixture",
+        "lastname": "User 3"
+      },
+      "address": {
+        "city": "Fixture City",
+        "street": "Fixture Street",
+        "number": 3,
+        "zipcode": "00000",
+        "geolocation": {
+          "lat": "32.0",
+          "long": "34.0"
+        }
+      },
+      "phone": "000-000-0000",
+      "__v": 0
+    },
+    {
+      "id": 4,
+      "email": "fixture-4@example.test",
+      "username": "fixture-user-4",
+      "name": {
+        "firstname": "Fixture",
+        "lastname": "User 4"
+      },
+      "address": {
+        "city": "Fixture City",
+        "street": "Fixture Street",
+        "number": 4,
+        "zipcode": "00000",
+        "geolocation": {
+          "lat": "32.0",
+          "long": "34.0"
+        }
+      },
+      "phone": "000-000-0000",
+      "__v": 0
+    },
+    {
+      "id": 5,
+      "email": "fixture-5@example.test",
+      "username": "fixture-user-5",
+      "name": {
+        "firstname": "Fixture",
+        "lastname": "User 5"
+      },
+      "address": {
+        "city": "Fixture City",
+        "street": "Fixture Street",
+        "number": 5,
+        "zipcode": "00000",
+        "geolocation": {
+          "lat": "32.0",
+          "long": "34.0"
+        }
+      },
+      "phone": "000-000-0000",
+      "__v": 0
+    }
+  ],
+  "carts": [
+    {
+      "id": 1,
+      "userId": 1,
+      "date": "2020-03-02T00:00:00.000Z",
+      "products": [
+        {
+          "productId": 1,
+          "quantity": 1
+        }
+      ],
+      "__v": 0
+    },
+    {
+      "id": 2,
+      "userId": 2,
+      "date": "2020-03-01T00:00:00.000Z",
+      "products": [
+        {
+          "productId": 1,
+          "quantity": 2
+        }
+      ],
+      "__v": 0
+    },
+    {
+      "id": 3,
+      "userId": 2,
+      "date": "2020-04-01T00:00:00.000Z",
+      "products": [
+        {
+          "productId": 1,
+          "quantity": 3
+        }
+      ],
+      "__v": 0
+    },
+    {
+      "id": 4,
+      "userId": 1,
+      "date": "2020-01-01T00:00:00.000Z",
+      "products": [
+        {
+          "productId": 1,
+          "quantity": 4
+        }
+      ],
+      "__v": 0
+    },
+    {
+      "id": 5,
+      "userId": 2,
+      "date": "2020-05-01T00:00:00.000Z",
+      "products": [
+        {
+          "productId": 1,
+          "quantity": 5
+        }
+      ],
+      "__v": 0
+    }
+  ]
+}

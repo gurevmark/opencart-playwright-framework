@@ -1,4 +1,4 @@
-name: OpenCart Web and DB Tests
+name: Playwright Web, API and DB Tests
 
 on:
   push:
@@ -8,17 +8,19 @@ on:
   workflow_dispatch:
     inputs:
       test_suite:
-        description: Select OpenCart test suite
+        description: Select test suite (API uses the controlled CI service)
         type: choice
         options:
+          - test:master
           - test:opencart
           - test:sanity
           - test:regression
           - test:e2e
+          - test:api
           - test:web
           - test:db
           - test:datadriven
-        default: test:opencart
+        default: test:master
       browser:
         description: Select browser (headless)
         type: choice
@@ -42,7 +44,7 @@ jobs:
       CI: 'true'
       APP_ENV: qa
       COMPOSE_PROJECT_NAME: opencart-ci-${{ github.run_id }}-${{ github.run_attempt }}
-      TEST_SUITE: ${{ inputs.test_suite || 'test:opencart' }}
+      TEST_SUITE: ${{ inputs.test_suite || 'test:master' }}
       TEST_BROWSER: ${{ inputs.browser || 'chromium' }}
       WEB_APP_URL: http://localhost:8080/opencart/upload/
       DB_HOST: 127.0.0.1
@@ -57,6 +59,20 @@ jobs:
       PRODUCT_NAME: ${{ vars.PRODUCT_NAME }}
       PRODUCT_QUANTITY: ${{ vars.PRODUCT_QUANTITY }}
       TOTAL_PRICE: ${{ vars.TOTAL_PRICE }}
+      # Dedicated CI fixture target; local .env continues targeting the public API.
+      API_BASE_URL: http://127.0.0.1:6400
+      USERNAME: ${{ secrets.FAKESTORE_CI_USERNAME }}
+      PASSWORD: ${{ secrets.FAKESTORE_CI_PASSWORD }}
+      USER_ID: '1'
+      PRODUCT_ID: '1'
+      CART_ID: '1'
+      LIMIT: '3'
+      START_DATE: '2020-01-01'
+      END_DATE: '2020-03-02'
+      FAKESTORE_PORT: '6400'
+      FAKESTORE_JWT_SECRET: ${{ secrets.FAKESTORE_JWT_SECRET }}
+      FAKESTORE_MONGO_PASSWORD: ${{ secrets.FAKESTORE_MONGO_PASSWORD }}
+      FAKESTORE_MONGO_ROOT_PASSWORD: ${{ secrets.FAKESTORE_MONGO_ROOT_PASSWORD }}
       # Compose and Playwright must initialize and test the same accounts.
       OPENCART_PORT: '8080'
       OPENCART_HTTP_SERVER: http://localhost:8080/opencart/upload/
@@ -85,7 +101,7 @@ jobs:
 
       - name: Validate required configuration
         id: validate
-        run: node scripts/ci/validate-env.mjs
+        run: node scripts/ci/validate-env.mjs --with-api
 
       - name: Install dependencies
         run: npm ci
@@ -96,14 +112,16 @@ jobs:
       - name: Install Playwright browsers
         run: npx --no-install playwright install --with-deps
 
-      - name: Start fresh OpenCart and MySQL
+      - name: Start fresh OpenCart, MySQL, FakeStore and MongoDB
         id: stack
-        run: docker compose --project-name "$COMPOSE_PROJECT_NAME" up --build --wait --wait-timeout 300
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --project-name "$COMPOSE_PROJECT_NAME" up --build --wait --wait-timeout 300
 
-      - name: Run OpenCart web and database tests
+      - name: Check controlled API implementation
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --project-name "$COMPOSE_PROJECT_NAME" exec -T fakestore npm test
+
+      - name: Run Playwright web, API and database tests
         id: tests
-        # Limit discovery too: API modules must not require settings in this job.
-        run: bash scripts/ci/run-tests.sh "$TEST_SUITE" "$TEST_BROWSER" tests/web tests/db
+        run: bash scripts/ci/run-tests.sh "$TEST_SUITE" "$TEST_BROWSER"
 
       - name: Upload HTML and JUnit reports
         if: ${{ !cancelled() && (steps.tests.outcome == 'success' || steps.tests.outcome == 'failure') }}
@@ -125,4 +143,4 @@ jobs:
 
       - name: Remove this run's containers and volumes
         if: ${{ always() && steps.validate.outcome == 'success' }}
-        run: docker compose --project-name "$COMPOSE_PROJECT_NAME" down --volumes --remove-orphans
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --project-name "$COMPOSE_PROJECT_NAME" down --volumes --remove-orphans

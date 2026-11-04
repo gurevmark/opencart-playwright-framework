@@ -14,7 +14,7 @@ For a new database volume, also supply `OPENCART_DB_ROOT_PASSWORD` in your ignor
 
 For host-side tests, set `DB_HOST=127.0.0.1` and configure `DB_USER`, `DB_PASSWORD`, and `DB_NAME` in `.env` for an existing MySQL account. Updating a MySQL container's environment variables does not change accounts/passwords already stored in its volume. Preserve the application's working credentials unless intentionally rotating them.
 
-GitHub Actions creates a separate stack and passes credentials through process environment variables, without a `.env` file. See [GitHub Actions setup](../docs/CI.md) for the complete Secrets/Variables list. Do not run CI cleanup commands against this local project.
+GitHub Actions creates a separate four-service stack by adding `docker-compose.ci.yml`: OpenCart/MySQL plus a controlled FakeStore API/MongoDB pair. It passes credentials through process environment variables, without a `.env` file. The default local Compose command still manages only OpenCart/MySQL. See [GitHub Actions setup](../docs/CI.md) for the complete Secrets/Variables list. Do not run CI cleanup commands against this local project.
 
 After changing the port mapping, `docker compose up -d --no-deps database` recreates only the database container and retains its named volume. Wait for its health check before running the headless database journey:
 
