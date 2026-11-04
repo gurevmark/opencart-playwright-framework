@@ -16,6 +16,31 @@ For host-side tests, set `DB_HOST=127.0.0.1` and configure `DB_USER`, `DB_PASSWO
 
 GitHub Actions creates a separate four-service stack by adding `docker-compose.ci.yml`: OpenCart/MySQL plus a controlled FakeStore API/MongoDB pair. It passes credentials through process environment variables, without a `.env` file. The default local Compose command still manages only OpenCart/MySQL. See [GitHub Actions setup](../docs/CI.md) for the complete Secrets/Variables list. Do not run CI cleanup commands against this local project.
 
+CI additionally builds `playwright/Dockerfile` from the repository root and runs
+the selected tests in that image. Browser binaries come from the version-matched
+official Playwright base; npm dependencies are cached in a separate Buildx layer
+between runs. The image is loaded locally on the Ubuntu runner without registry
+publication. Test code comes from the checked-out commit, credentials arrive only
+at runtime, and reports are written to host-mounted output directories. See the
+[image and cache notes](../docs/CI.md#playwright-image-and-build-cache).
+
+For a complete local pre-push replica in Docker Desktop, run
+`node scripts/ci/local-docker.mjs` from the repository root. It explicitly adds
+`docker-compose.ci.yml` and `docker-compose.test.yml`, builds/runs the Playwright
+service alongside all four application/database containers, and uses the
+controlled API instead of the public endpoint. Its `opencart-local-ci` project,
+ports, volumes and private generated credentials are separate from the existing
+local OpenCart installation. After tests, the four application services remain
+available in Docker Desktop; use the helper's `stop` or `down` command to stop or
+remove only that project. See [full local setup](../docs/CI.md#full-docker-desktop-stack).
+
+The shared test service joins the same Compose bridge network as the applications.
+It uses `opencart:80`, `database:3306` and `fakestore:6400`, with private browser
+shared memory. Docker Desktop's host-networking option is not needed. OpenCart
+selects the configured internal base URL for internal service requests and retains
+the external localhost URL for access from the Mac. The original two-service
+runtime keeps its previous URL behavior when no internal URL is configured.
+
 After changing the port mapping, `docker compose up -d --no-deps database` recreates only the database container and retains its named volume. Wait for its health check before running the headless database journey:
 
 ```sh

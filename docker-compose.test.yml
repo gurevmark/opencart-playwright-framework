@@ -1,0 +1,51 @@
+# Shared opt-in test service for CI and the local Docker Desktop replica.
+services:
+  playwright-tests:
+    profiles: [tests]
+    image: ${PLAYWRIGHT_TEST_IMAGE:-opencart-playwright:local}
+    build:
+      context: .
+      dockerfile: docker/playwright/Dockerfile
+      args:
+        PLAYWRIGHT_VERSION: ${PLAYWRIGHT_VERSION:?Resolve Playwright from the lockfile}
+    init: true
+    shm_size: 1gb
+    user: "${TEST_UID:?Configure TEST_UID}:${TEST_GID:?Configure TEST_GID}"
+    environment:
+      CI: "true"
+      # The :- operator supplies qa when APP_ENV is unset or empty.
+      # The local helper explicitly sets local-docker; GitHub Actions sets qa.
+      APP_ENV: ${APP_ENV:-qa}
+      WEB_APP_URL: http://opencart/opencart/upload/
+      APP_EMAIL: ${APP_EMAIL}
+      APP_PASSWORD: ${APP_PASSWORD}
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      DB_HOST: database
+      DB_PORT: "3306"
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      PRODUCT_NAME: ${PRODUCT_NAME}
+      PRODUCT_QUANTITY: ${PRODUCT_QUANTITY}
+      TOTAL_PRICE: ${TOTAL_PRICE}
+      # Use the API's container port, regardless of its published host port.
+      API_BASE_URL: http://fakestore:6400
+      USERNAME: ${USERNAME}
+      PASSWORD: ${PASSWORD}
+      USER_ID: ${USER_ID}
+      PRODUCT_ID: ${PRODUCT_ID}
+      CART_ID: ${CART_ID}
+      LIMIT: ${LIMIT}
+      START_DATE: ${START_DATE}
+      END_DATE: ${END_DATE}
+    volumes:
+      - ${PLAYWRIGHT_REPORTS_DIR:-./reports}:/app/reports
+      - ${PLAYWRIGHT_ALLURE_DIR:-./allure-results}:/app/allure-results
+      - ${PLAYWRIGHT_RESULTS_DIR:-./test-results}:/app/test-results
+    depends_on:
+      opencart:
+        condition: service_healthy
+      fakestore:
+        condition: service_healthy
+    command: ["bash", "scripts/ci/run-tests.sh", "test:master", "chromium", "--output=test-results/run"]

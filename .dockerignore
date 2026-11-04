@@ -1,0 +1,55 @@
+# The root build context is used only for the Playwright test image.
+# Allow runtime sources explicitly; never send .env, Git data or old reports.
+**
+!package.json
+!package-lock.json
+!playwright.config.ts
+!tsconfig.json
+!api/
+!api/**
+!fixtures/
+!fixtures/**
+!pages/
+!pages/**
+!tests/
+!tests/**
+!testdata/
+!testdata/**
+!utils/
+!utils/**
+!scripts/
+!scripts/ci/
+!scripts/ci/**
+**/.env*
+**/node_modules
+
+#  Test artifacts (bind-mounted at runtime, not part of the image)
+test-results
+reports
+allure-results
+allure-report
+custom-report
+playwright-report
+
+#  Documentation & prompts (not needed at runtime)
+docs/
+prompts/
+*.md
+
+#  CI/CD & platform-specific config
+Jenkinsfile
+env_setup.sh
+docker-compose.yml
+
+# Playwright / IDE cache & config
+.playwright/
+.playwright-cli/
+.playwright-mcp/
+.vscode/
+
+#  Version control
+.git
+.gitignore
+.github
+.claude
+.commandcode
