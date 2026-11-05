@@ -235,7 +235,7 @@ still displays the original passing run.
 From the project root, run:
 
 ```sh
-node scripts/ci/local-docker.mjs
+npm test
 ```
 
 This builds the current test image using Docker's local layer cache, starts
@@ -267,13 +267,34 @@ network. Normal Docker Desktop networking is sufficient; the host-networking
 feature can remain disabled. See
 [Compose networking](https://docs.docker.com/compose/how-tos/networking/).
 
+The npm scripts select the same suites listed above and use Chromium by default:
+
+```sh
+npm run test:master       # All scenarios; equivalent to npm test
+npm run test:opencart     # OpenCart web and database scenarios
+npm run test:sanity
+npm run test:regression
+npm run test:e2e
+npm run test:api
+npm run test:web
+npm run test:db
+npm run test:datadriven
+
+# Arguments after -- go to the Docker helper: browser, then Playwright options.
+npm run test:sanity -- firefox
+npm run test:api -- chromium --list
+npm run test:web -- chromium tests/web/shopping.spec.ts
+```
+
+When passing Playwright options, include the browser first, even for Chromium.
+These commands run the tests in Docker Desktop using the existing helper; Node
+and npm are required on the host, while browsers and test dependencies come from
+the test image. The direct `node scripts/ci/local-docker.mjs` command is still
+available.
+
 ```sh
 # Start/wait for applications without running tests.
 node scripts/ci/local-docker.mjs up
-
-# Choose a suite/browser; trailing arguments are passed to Playwright.
-node scripts/ci/local-docker.mjs test test:master firefox
-node scripts/ci/local-docker.mjs test test:api chromium
 
 # Inspect or stop only this project.
 node scripts/ci/local-docker.mjs status

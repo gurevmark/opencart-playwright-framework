@@ -22,6 +22,8 @@
 !scripts/ci/**
 **/.env*
 **/node_modules
+Project files/
+*.zip
 
 #  Test artifacts (bind-mounted at runtime, not part of the image)
 test-results
