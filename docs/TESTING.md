@@ -108,9 +108,10 @@ bash scripts/ci/run-tests.sh test:web chromium tests/web --output=test-results/h
 bash scripts/ci/run-tests.sh test:regression webkit --output=test-results/host --workers=1
 ```
 
-The suite names below are positional arguments to both the shell runner and the
-local Docker helper. For example, `node scripts/ci/local-docker.mjs test test:api chromium`
-selects the controlled FakeStore endpoint in Docker. Use the root `allure:*`
+The root npm scripts use the suite names below. `npm test` runs `test:master` and
+`npm run test:api` selects the controlled FakeStore endpoint in Docker. To pass options,
+put the browser first, for example `npm run test:web -- webkit tests/web/shopping.spec.ts`.
+The direct Docker helper and the host shell runner also accept these suite names. Use the root `allure:*`
 npm scripts to manage the reporting service. [Local reporting commands](REPORTS.md#generate-and-view-reports)
 
 | Wrapper suite | Selected title tags | Scope |

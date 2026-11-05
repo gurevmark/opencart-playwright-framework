@@ -14,12 +14,12 @@ MySQL and FakeStore publish their ports on the loopback interface. MongoDB is re
 Start Docker with Compose available and use Node.js on the host. The test image supplies the test dependencies and browsers. Choose one of these commands.
 
 ```sh
-node scripts/ci/local-docker.mjs test test:master chromium  # All scenarios
-node scripts/ci/local-docker.mjs test test:api chromium     # Controlled FakeStore API
-node scripts/ci/local-docker.mjs test test:sanity firefox   # Sanity tests in Firefox
+npm test                        # All scenarios in Chromium
+npm run test:api                # Controlled FakeStore API
+npm run test:sanity -- firefox  # Sanity tests in Firefox
 ```
 
-The helper combines three Compose files, builds the Playwright image and waits for the four application and database services. It runs the FakeStore integration checks and OpenCart URL checks before the selected tests. The command returns the test exit code. The four services stay available for diagnosis after the test container exits. [Local helper](../scripts/ci/local-docker.mjs) · [OpenCart and MySQL](../docker-compose.yml) · [FakeStore and MongoDB](../docker-compose.ci.yml) · [Playwright](../docker-compose.test.yml)
+These npm commands call `scripts/ci/local-docker.mjs`. You can also invoke it directly, for example `node scripts/ci/local-docker.mjs test test:api chromium`. The helper combines three Compose files, builds the Playwright image and waits for the four application and database services. It runs the FakeStore integration checks and OpenCart URL checks before the selected tests. The command returns the test exit code. The four services stay available for diagnosis after the test container exits. [Local helper](../scripts/ci/local-docker.mjs) · [OpenCart and MySQL](../docker-compose.yml) · [FakeStore and MongoDB](../docker-compose.ci.yml) · [Playwright](../docker-compose.test.yml)
 
 Inside the Compose network, Playwright uses `http://opencart/opencart/upload/`, `database:3306` and `http://fakestore:6400`. OpenCart generates internal storefront and Admin links when the request host is `opencart` or `opencart:80`. Requests from the host browser use the configured external URL. The test container has 1 GB of private shared memory for browser processes.
 

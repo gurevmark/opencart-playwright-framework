@@ -138,7 +138,7 @@ npm run allure:open
 After a run using the existing full local Docker helper:
 
 ```sh
-node scripts/ci/local-docker.mjs test test:master chromium
+npm run test:master
 npm run allure:generate -- local-docker
 npm run allure:open -- local-docker
 ```

@@ -33,8 +33,9 @@
 - Establish the target before running tests. Host runs may use the public FakeStore
   API and persistent OpenCart data; the explicit full Docker helper uses its own
   controlled services. See [CI / full Docker setup](docs/CI.md).
-- Pass `test:*` suite names to `scripts/ci/local-docker.mjs test` in Docker or
-  `scripts/ci/run-tests.sh` on the host. Select a browser explicitly. Of the 26
+- Use `npm run test:<suite>` for Docker or pass the suite to
+  `scripts/ci/run-tests.sh` on the host. The direct Docker helper accepts
+  the same suite names. Select a browser explicitly. Of the 26
   `@web` cases, 14 also require MySQL. The standalone `tests/db/db-client.spec.ts`
   exercises a real MySQL connection.
 - For discovery and offline helper checks, use:
@@ -61,12 +62,7 @@
 
 ## Secret checks before commits
 
-- Use the local `check-secrets` skill before committing. After the final
-  `git add`, run `python3 /Users/mark/.codex/skills/check-secrets/scripts/secrets_check.py`
-  from the current worktree. Only exit code 0 permits an otherwise authorized commit.
-- For exit code 1, resolve the finding and stage the fix. For exit code 2, resolve the
-  incomplete scan. Run the check again after either result.
-- Preserve other contributors' staged changes. Keep secret values out of logs and keep
-  the pre-commit hook enabled. This workstation installs it in the shared Git directory,
-  so it covers linked worktrees. For a new clone, check existing hooks and
-  `core.hooksPath` before installation.
+- Before committing, use the local `check-secrets` skill at `/Users/mark/.codex/skills/check-secrets/SKILL.md`.
+- After the final `git add`, run `python3 /Users/mark/.codex/skills/check-secrets/scripts/secrets_check.py` from the current worktree. Only exit code 0 permits an otherwise authorized commit. For code 1, resolve the finding and stage the fix; for code 2, resolve the incomplete check. Rerun after either.
+- Preserve the user's staged selection. Do not bypass the check with `--no-verify`, disable the hook, or print secret values.
+- This machine has a local `pre-commit` hook in the repository's shared Git directory, covering linked worktrees. New clones need their own hook installation; check existing hooks and `core.hooksPath` first.

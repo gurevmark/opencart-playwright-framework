@@ -4,7 +4,7 @@
 
 | Task | Where to start |
 | --- | --- |
-| Check the stack locally | Run `node scripts/ci/local-docker.mjs test test:sanity chromium` from the repository root for the nine sanity cases. Use `test:master` for all 94. [Full Docker Desktop stack](#full-docker-desktop-stack) |
+| Check the stack locally | Run `npm run test:sanity` from the repository root for the nine sanity cases. Use `npm test` for all 94. [Full Docker Desktop stack](#full-docker-desktop-stack) |
 | Start a GitHub Actions run | Open **Actions → Playwright Web, API and DB Tests → Run workflow** and select the branch, suite and browser. Pushes to `main` and eligible PRs targeting `main` use `test:master` in Chromium. [CI configuration](#repository-secrets) |
 | Test an existing OpenCart installation or another API endpoint | Set host addresses and test credentials in your local configuration. Pass `--output=test-results/host` to keep Docker captures separate. [Host runs and test discovery](#existing-host-side-local-runs) |
 | Investigate an Actions failure | Open the first failed step in the `test` job to distinguish a setup error, test failure or failed artifact check. For published runs, open the Allure link on the run's **Summary**. [Report formats and access](REPORTS.md#open-a-ci-report) |
@@ -253,7 +253,7 @@ still displays the original passing run.
 From the project root, run:
 
 ```sh
-node scripts/ci/local-docker.mjs test test:master chromium
+npm test
 ```
 
 This builds the current test image using Docker's local layer cache, starts
@@ -285,25 +285,30 @@ network. Normal Docker Desktop networking is sufficient; the host-networking
 feature can remain disabled. See
 [Compose networking](https://docs.docker.com/compose/how-tos/networking/).
 
-Choose a suite from the table above and pass the browser name before any
-Playwright options. These examples all use the local Docker helper.
+The npm scripts select the same suites listed above and use Chromium by default:
 
 ```sh
-node scripts/ci/local-docker.mjs test test:master chromium
-node scripts/ci/local-docker.mjs test test:opencart chromium
-node scripts/ci/local-docker.mjs test test:sanity chromium
-node scripts/ci/local-docker.mjs test test:regression chromium
-node scripts/ci/local-docker.mjs test test:e2e chromium
-node scripts/ci/local-docker.mjs test test:api chromium
-node scripts/ci/local-docker.mjs test test:web chromium
-node scripts/ci/local-docker.mjs test test:db chromium
-node scripts/ci/local-docker.mjs test test:datadriven chromium
+npm run test:master       # All scenarios; equivalent to npm test
+npm run test:opencart     # OpenCart web and database scenarios
+npm run test:sanity
+npm run test:regression
+npm run test:e2e
+npm run test:api
+npm run test:web
+npm run test:db
+npm run test:datadriven
 
-# Choose another browser, list API cases, or run only the shopping spec.
-node scripts/ci/local-docker.mjs test test:sanity firefox
-node scripts/ci/local-docker.mjs test test:api chromium --list
-node scripts/ci/local-docker.mjs test test:web chromium tests/web/shopping.spec.ts
+# Arguments after -- go to the Docker helper: browser, then Playwright options.
+npm run test:sanity -- firefox
+npm run test:api -- chromium --list
+npm run test:web -- chromium tests/web/shopping.spec.ts
 ```
+
+When passing Playwright options, include the browser first, even for Chromium.
+These commands run the tests in Docker Desktop using the existing helper; Node
+and npm are required on the host, while browsers and test dependencies come from
+the test image. The direct `node scripts/ci/local-docker.mjs` command is still
+available.
 
 Even with `--list`, the helper builds the image, starts or reuses the stack,
 waits for all four services and runs their checks. Playwright then replaces

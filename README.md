@@ -10,10 +10,10 @@ Run these commands from the repository root with Node.js, npm and a running Dock
 node --version
 docker compose version
 docker info --format '{{.ServerVersion}}'
-node scripts/ci/local-docker.mjs test test:sanity chromium
+npm run test:sanity
 ```
 
-On the first run, allow time for the images to build and four services to become healthy. The helper checks FakeStore and the OpenCart URLs, then runs nine headless smoke tests. A successful command exits with code 0. Open `reports/local-docker/index.html` to see the result of each test. For the full suite, replace `test:sanity` with `test:master`.
+On the first run, allow time for the images to build and four services to become healthy. The helper checks FakeStore and the OpenCart URLs, then runs nine headless smoke tests. A successful command exits with code 0. Open `reports/local-docker/index.html` to see the result of each test. Use `npm test` to run the full suite.
 
 The four application and database containers stay up in the `opencart-local-ci` project after the test runner exits. The default storefront is available [on localhost](http://localhost:18086/opencart/upload/). Keep the ignored `.docker-local/runtime.json` with this stack's volumes. It contains the generated credentials and published ports.
 
@@ -24,11 +24,13 @@ node scripts/ci/local-docker.mjs stop
 
 ## Select a suite
 
-Pass the suite and browser as positional arguments. For example, this command runs only the three shopping tests in WebKit.
+Use `npm run <suite>` from the repository root. To pass a browser and Playwright options, put them after `--`. For example, this command runs only the three shopping tests in WebKit.
 
 ```sh
-node scripts/ci/local-docker.mjs test test:web webkit tests/web/shopping.spec.ts
+npm run test:web -- webkit tests/web/shopping.spec.ts
 ```
+
+The npm scripts call the same Docker helper used in the suite guides. The equivalent direct invocation is `node scripts/ci/local-docker.mjs test test:web webkit tests/web/shopping.spec.ts`.
 
 | Suite | Selection | Cases per browser project |
 | --- | --- | ---: |

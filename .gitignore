@@ -27,3 +27,7 @@ node_modules/
 /playwright/.sessions/
 .DS_Store
 /dist/
+
+# Local files and IDE/editor state
+/Project files/
+*.zip
