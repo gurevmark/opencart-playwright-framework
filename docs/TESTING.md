@@ -14,7 +14,7 @@ test is not evidence that the current target passes.
 
 | Check | Needs running applications? | What it establishes |
 | --- | --- | --- |
-| `node --test scripts/ci/*.test.mjs` | No | 14 checks cover CI environment validation, the local Docker helper, Allure input/history handling and Pages artifact selection |
+| `node --test scripts/ci/*.test.mjs` | No | Offline checks cover CI configuration and triggers, Docker credentials, Allure archive caching, public-result filtering and Pages history selection |
 | `php docker/opencart/http-server.test.php` | No; needs a PHP CLI | OpenCart public/internal URL-selection helper behavior |
 | Host-side Playwright `--list` | No. Requires installed npm dependencies and any discovery-time settings for the selected files. | Lists registered tests. The normal reporter also writes reports. |
 | TypeScript check | No; needs a separately supplied TypeScript compiler | Static checks covered by `tsconfig.json` |

@@ -4,7 +4,7 @@ This TypeScript project tests two systems. OpenCart scenarios use the storefront
 
 ## First run in Docker
 
-Run these commands from the repository root with Node.js, npm and a running Docker engine with Compose available. The helper builds the Playwright image and supplies the browsers, test dependencies and synthetic accounts. It works without a local `.env`.
+Run these commands from the repository root with Node.js, npm and a running Docker engine with Compose available. The helper builds the Playwright image and supplies the browsers, test dependencies and synthetic accounts.
 
 ```sh
 node --version
@@ -13,9 +13,15 @@ docker info --format '{{.ServerVersion}}'
 npm run test:sanity
 ```
 
+The first invocation generates random passwords and saves them in the ignored
+`.docker-local/runtime.json`, readable only by its owner. The helper passes matching
+credentials to MySQL, MongoDB, OpenCart's administrator and customer setup, the
+controlled FakeStore API and Playwright. This full Docker mode supplies its own
+configuration and does not read the root `.env`.
+
 On the first run, allow time for the images to build and four services to become healthy. The helper checks FakeStore and the OpenCart URLs, then runs nine headless smoke tests. A successful command exits with code 0. Open `reports/local-docker/index.html` to see the result of each test. Use `npm test` to run the full suite.
 
-The four application and database containers stay up in the `opencart-local-ci` project after the test runner exits. The default storefront is available [on localhost](http://localhost:18086/opencart/upload/). Keep the ignored `.docker-local/runtime.json` with this stack's volumes. It contains the generated credentials and published ports.
+The four application and database containers stay up in the `opencart-local-ci` project after the test runner exits. The default storefront is available [on localhost](http://localhost:18086/opencart/upload/). Later runs reuse the generated credentials and persistent volumes. Keep `.docker-local/runtime.json` for as long as you keep those volumes. [Configuration sources](docs/CONFIGURATION.md#configuration-ownership-and-precedence)
 
 ```sh
 node scripts/ci/local-docker.mjs status
@@ -48,7 +54,7 @@ The counts come from the November 5, 2026 catalog. Tags overlap. The [testing gu
 
 ## Use the existing local environment
 
-The existing OpenCart/MySQL stack uses the separate `framework1-opencart` Compose project. For a host-side run, install the locked dependencies, install the browser you intend to use and fill in your test environment.
+The existing OpenCart/MySQL stack uses the separate `framework1-opencart` Compose project. Host runs obtain credentials and service addresses from the root `.env` or exported variables. Supply accounts that already exist in the target services. Install the locked dependencies and the browser you intend to use.
 
 ```sh
 npm ci
@@ -58,6 +64,17 @@ docker compose ps
 ```
 
 Check that the storefront and MySQL settings refer to the same test installation before running customer scenarios. For host runs, use `--output=test-results/host` to keep Docker captures. Full-suite discovery needs six FakeStore selectors. File-scoped examples, setup steps and their side effects are in the [development guide](docs/DEVELOPMENT.md).
+
+## GitHub CI
+
+Open a PR targeting `main` to run the full suite in Chromium. New commits and
+reopening the PR trigger a fresh run. The required `test` check must pass before
+merging. Merging does not start another run. **Run workflow** remains available
+for manual suite and browser selection. Eligible PR runs provide **Open Allure
+report** in Summary and downloadable reports. If Pages cannot refresh a
+previously deployed commit, Summary provides **Download Allure report**.
+[CI setup](docs/CI.md) ·
+[Reports](docs/REPORTS.md)
 
 ## Find what you need
 

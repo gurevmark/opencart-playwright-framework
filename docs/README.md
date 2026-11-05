@@ -54,7 +54,7 @@ source links below when changing a setting or reconciling conflicting text.
 | Controlled API and MongoDB services | [CI application overlay](../docker-compose.ci.yml), [service sources](../docker/fakestore/) |
 | Containerized test execution | [test Compose overlay](../docker-compose.test.yml), [test Dockerfile](../docker/playwright/Dockerfile), [Docker runner](../scripts/ci/run-tests-in-docker.sh) |
 | Isolated local stack and its private configuration | [local-docker.mjs](../scripts/ci/local-docker.mjs) |
-| CI triggers, repository settings, uploaded artifacts, cleanup | [workflow](../.github/workflows/playwright.yml), [environment validator](../scripts/ci/validate-env.mjs) |
+| CI triggers, repository settings, uploaded artifacts, cleanup | [workflow](../.github/workflows/playwright.yml), [environment validator](../scripts/ci/validate-env.mjs), [Allure archive installer](../scripts/ci/install-allure.sh) |
 | Local Allure and CI artifact writers | [Report guide](REPORTS.md), [Compose service](../docker-compose.allure.yml), [Allure helper](../scripts/allure.mjs), [configured reporters](../scripts/ci/reporters/) and [CI artifact verifier](../scripts/ci/verify-report-privacy.py) |
 | Files excluded from Git / test images | [.gitignore](../.gitignore), [root .dockerignore](../.dockerignore), [service .dockerignore](../docker/fakestore/.dockerignore) |
 

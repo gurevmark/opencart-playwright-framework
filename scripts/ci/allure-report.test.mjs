@@ -123,3 +123,40 @@ test('keeps the current attempt and the nine newest eligible reports, including 
   assert.deepEqual(selected, [current, ...artifacts.slice(-9).reverse().map(a => a.name)]);
   assert.throws(() => retainedReports('../../site', [], repo, () => trusted, () => true));
 });
+
+test('retains a same-repository PR report after updates or merge empty the run PR list', () => {
+  const item = artifact(40, 40);
+  item.workflow_run.head_branch = 'feature';
+  const run = { ...trusted, event: 'pull_request', head_branch: 'feature', head_sha: 'pr-commit', pull_requests: [] };
+  const pull = {
+    base: { ref: 'main', repo: { full_name: repo } },
+    head: { ref: 'feature', repo: { full_name: repo } },
+  };
+  const selected = retainedReports('allure-html-41-1', [item], repo, () => run, () => false, sha => {
+    assert.equal(sha, 'pr-commit');
+    return [pull];
+  });
+  assert.deepEqual(selected, ['allure-html-41-1', 'allure-html-40-1']);
+});
+
+test('PR history rejects forks, other base branches and mismatched source metadata', () => {
+  const item = artifact(40, 40);
+  item.workflow_run.head_branch = 'feature';
+  const run = { ...trusted, event: 'pull_request', head_branch: 'feature', head_sha: 'pr-commit' };
+  const pull = {
+    base: { ref: 'main', repo: { full_name: repo } },
+    head: { ref: 'feature', repo: { full_name: repo } },
+  };
+  const rejected = [
+    { ...pull, head: { ...pull.head, repo: { full_name: 'other/fork' } } },
+    { ...pull, base: { ...pull.base, ref: 'release' } },
+    { ...pull, base: { ...pull.base, repo: { full_name: 'other/project' } } },
+    { ...pull, head: { ...pull.head, ref: 'other-feature' } },
+  ];
+  for (const source of rejected) {
+    assert.deepEqual(retainedReports('allure-html-41-1', [item], repo, () => run, () => true, () => [source]),
+      ['allure-html-41-1']);
+  }
+  assert.deepEqual(retainedReports('allure-html-41-1', [item], repo,
+    () => ({ ...run, head_branch: 'other-feature' }), () => true, () => [pull]), ['allure-html-41-1']);
+});

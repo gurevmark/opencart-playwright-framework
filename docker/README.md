@@ -30,7 +30,7 @@ node scripts/ci/local-docker.mjs stop    # Stop the services
 node scripts/ci/local-docker.mjs down    # Remove containers and network, keep named volumes
 ```
 
-The helper passes its own settings to Compose with `--env-file /dev/null`. Its first invocation creates an ignored, private `.docker-local/runtime.json` containing generated credentials and published ports. Keep this file for as long as you keep the volumes. If a host port is busy, edit the relevant entry under `ports`, then run `up` again.
+The helper passes its own settings to Compose with `--env-file /dev/null`. Its first invocation creates an ignored, owner-readable `.docker-local/runtime.json` containing random passwords and published ports. It provisions the databases, OpenCart accounts and controlled API with those credentials and supplies the same credentials to Playwright. Later invocations reuse that file and the existing volumes. Keep this file for as long as you keep the volumes. If a host port is busy, edit the relevant entry under `ports`, then run `up` again. [Credential mappings](../docs/CONFIGURATION.md#application-and-compose-inputs)
 
 HTML and JUnit reports go to `reports/local-docker/`, raw Allure results to `allure-results/local-docker/`, and browser captures to `test-results/local-docker/run/`. To view a Docker run in the separate Allure service, use the following commands after the tests finish. [Report formats and history](../docs/REPORTS.md)
 
