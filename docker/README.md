@@ -28,7 +28,9 @@ at runtime, and reports are written to host-mounted output directories. See the
 [image and cache notes](../docs/CI.md#playwright-image-and-build-cache).
 
 For a complete local pre-push replica in Docker Desktop, run
-`node scripts/ci/local-docker.mjs` from the repository root. It explicitly adds
+`npm test` from the repository root, or choose a suite with commands such as
+`npm run test:sanity` and `npm run test:api`. These scripts use
+`scripts/ci/local-docker.mjs`, which explicitly adds
 `docker-compose.ci.yml` and `docker-compose.test.yml`, builds/runs the Playwright
 service alongside all four application/database containers, and uses the
 controlled API instead of the public endpoint. Its `opencart-local-ci` project,
