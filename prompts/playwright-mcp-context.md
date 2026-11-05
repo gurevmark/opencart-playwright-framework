@@ -1,6 +1,13 @@
 # Playwright MCP Context — Generic Test Generation Instructions
 
-This file is the **central coding and automation guideline** and the **single source of truth** for AI-assisted Playwright + TypeScript test generation.
+This file is the **reusable coding and automation guideline** for AI-assisted Playwright + TypeScript test generation.
+
+For this repository, start with [AGENTS.md](../AGENTS.md) and the
+[documentation index and source-of-truth map](../docs/README.md). This generic
+template supplies generation conventions; the repository's rules, maintained
+guides and actual implementation define current setup and behavior. In particular,
+select suites on the command line, use injected environment variables in CI, and
+check [compiler availability](../docs/TESTING.md) before attempting type checking.
 
 Use it with: Playwright MCP, Playwright Test Agents, Playwright CLI, GitHub Copilot, Claude Code, Codex, and any other AI coding / vibe-coding agent.
 
@@ -958,7 +965,7 @@ When modifying an existing file:
 
 # 24. Test Organization, Tagging & Execution
 
-- Tags live **inside test titles** (e.g. `test('... @master @sanity', ...)`). `playwright.config.ts` may set a default `grep` pattern (e.g. `/@master/`).
+- Tags live **inside test titles** (e.g. `test('... @master @sanity', ...)`). In this repository, select tags on the command line; do not add a global `grep` to `playwright.config.ts`. See the [testing guide](../docs/TESTING.md) for the existing runner.
 
 | Tag | Typical scope |
 | --- | --- |
@@ -1173,7 +1180,7 @@ Playwright + TypeScript
     └── DB Tests
 ```
 
-Use this file as the **single source of truth for AI-assisted Playwright TypeScript test generation**, reusable across any Web, API, DB, or combined automation project. Supply it together with a project-specific test prompt file to drive actual test generation.
+Use this file as reusable generation guidance across Web, API, DB, or combined automation projects. Supply it together with a project-specific test prompt file; in this repository, follow the precedence and current source links in the [documentation index](../docs/README.md).
 
 Do not add unrelated technologies, frameworks, libraries, files, or architectural patterns unless they are already present in the project or explicitly required.
 
