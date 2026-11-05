@@ -228,7 +228,8 @@ CI checks fresh output directories, the reporter's completion marker, file
 structure and configured secrets before uploading `playwright-report` and
 `allure-results` for seven days. `test-results/run/` holds private captures.
 Separate HTML artifacts (`allure-html-*` or `allure-preview-*`) are retained
-for 30 days. Pages publication is restricted to eligible `main` runs.
+for 30 days. Pages publishes eligible same-repository PR runs and manual runs
+on `main`. Other manual refs receive preview artifacts.
 [Artifact access and retention](REPORTS.md#open-a-ci-report)
 
 ### Separate local Allure generator

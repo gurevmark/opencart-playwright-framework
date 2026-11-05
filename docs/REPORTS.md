@@ -6,7 +6,7 @@
 | --- | --- |
 | Read a local Playwright report | After a run through the Docker helper, open `reports/local-docker/index.html`. After a host-side run, open `reports/index.html`. [Local reports](#local-reports) |
 | Open Allure for a local Docker run | Run `npm run allure:up`, `npm run allure:generate -- local-docker`, then `npm run allure:open -- local-docker`. Use `host` for a host-side run. [Generate and view reports](#generate-and-view-reports) |
-| Open an Actions result | For a published run on `main`, follow the Allure link in **Summary**. For an eligible same-repository PR, download `allure-preview-<run>-<attempt>` from **Artifacts** and open `index.html`. [Publication conditions](#open-a-ci-report) |
+| Open an Actions result | For a same-repository PR or manual run on `main`, follow **Open Allure report** in **Summary**. You can also download its `allure-html-<run>-<attempt>` artifact and open `index.html`. [Publication conditions](#open-a-ci-report) |
 | Locate a failed test step | Download `playwright-report` or `allure-results` from Actions for statuses, named steps and the failure location when available. Traces, screenshots, video and `error-context.md` stay in Playwright's capture directory. [What is public](#what-is-public) |
 
 Use `--output=test-results/host` on host runs to preserve Docker captures.
@@ -24,9 +24,9 @@ the attempt that produced the test results, for example `runs/12345/2/index.html
 
 | Run | Browser-ready Allure HTML |
 | --- | --- |
-| Direct push to `main` or manual run on the `main` branch | Pages link in Summary and an `allure-html-<run>-<attempt>` artifact |
-| Push produced by a PR merge | Tests and reports are skipped |
-| Same-repository PR or manual run on another ref | `allure-preview-<run>-<attempt>` artifact in Actions |
+| Same-repository PR or manual run on `main` | Pages link in Summary and an `allure-html-<run>-<attempt>` artifact |
+| PR merge or direct push to `main` | No workflow run |
+| Manual run on another ref | `allure-preview-<run>-<attempt>` artifact in Actions |
 | Fork PR or Dependabot | The required `test` check fails before executing untrusted code |
 
 When tests fail but their result files pass the upload check, the report job
@@ -80,7 +80,9 @@ Keep the mount directories themselves. The `host` input also contains the
 independent `local-docker/` directory.
 
 CI generates a single HTML file with the SHA-256-verified Allure 2.46.1 CLI
-and the hosted runner's Java runtime. The existing `allure-playwright` adapter
+and the hosted runner's Java runtime. It restores the versioned archive cache
+and downloads only on a cache miss, then verifies the checksum before extraction.
+[Cache and installation](CI.md#github-pages-deployment) The existing `allure-playwright` adapter
 produces compatible results. The report displays its run and attempt and uses
 [Allure's analytics opt-out](https://github.com/allure-framework/allure2/blob/2.46.1/Analytics.md#opting-out).
 The local Docker service displays the filtered Allure results and their history. See the

@@ -5,11 +5,16 @@
 | Task | Where to start |
 | --- | --- |
 | Check the stack locally | Run `npm run test:sanity` from the repository root for the nine sanity cases. Use `npm test` for all 94. [Full Docker Desktop stack](#full-docker-desktop-stack) |
-| Start a GitHub Actions run | Open **Actions → Playwright Web, API and DB Tests → Run workflow** and select the branch, suite and browser. Pushes to `main` and eligible PRs targeting `main` use `test:master` in Chromium. [CI configuration](#repository-secrets) |
+| Start a GitHub Actions run | Open **Actions → Playwright Web, API and DB Tests → Run workflow** and select the branch, suite and browser. Opening, updating or reopening an eligible PR targeting `main` runs `test:master` in Chromium. [CI configuration](#repository-secrets) |
 | Test an existing OpenCart installation or another API endpoint | Set host addresses and test credentials in your local configuration. Pass `--output=test-results/host` to keep Docker captures separate. [Host runs and test discovery](#existing-host-side-local-runs) |
 | Investigate an Actions failure | Open the first failed step in the `test` job to distinguish a setup error, test failure or failed artifact check. For published runs, open the Allure link on the run's **Summary**. [Report formats and access](REPORTS.md#open-a-ci-report) |
 
-The workflow has four jobs. `trigger` identifies pushes produced by PR merges and skips their tests. `test` builds the stack, runs the suite and checks the diagnostic artifacts before upload. `report` builds HTML when the checked artifact contains at least one test result. `publish` deploys it to Pages for direct pushes to `main` and manual runs on that branch. Fork pull requests and Dependabot runs fail the required check before checking out code or using repository secrets. [Workflow definition](../.github/workflows/playwright.yml)
+The workflow has three jobs. `test` builds the stack, runs the suite and verifies
+artifacts before upload. `report` prepares public results, installs Allure from a
+verified cached archive and builds downloadable HTML. `publish` deploys reports
+for eligible same-repository PRs and manual runs on `main`. Fork PRs and
+Dependabot fail the required check before code checkout or secret use.
+[Workflow definition](../.github/workflows/playwright.yml)
 
 Automatic CI selects **94 Playwright scenarios** in one headless Chromium project
 on an Ubuntu GitHub-hosted runner. Of these, **27** cover OpenCart web/database
@@ -58,20 +63,16 @@ The workflow display name remains **Playwright Web, API and DB Tests**. Its
 **Check FakeStore API and OpenCart URL helpers** step checks the two application
 helpers before the separate step that runs the Playwright Web/API/DB suite.
 
-Automatic tests run on direct pushes to `main` and when a PR targeting `main`
-is opened. GitHub also creates a push run after a PR merge. The `trigger` job
-uses GitHub's associated PR and merge SHA to skip tests and reports in that run,
-including squash and rebase merges. A failed API lookup fails the required check.
-Manual runs remain available under **Actions → Playwright Web, API and DB Tests
-→ Run workflow**.
+Automatic tests run when a PR targeting `main` opens, receives new commits or
+reopens. Merging a PR and direct pushes to `main` do not trigger this workflow.
+Manual runs are available under **Actions → Playwright Web, API and DB Tests →
+Run workflow**, with suite and browser selection.
 
-The `test` check from GitHub Actions is required on `main`, including for
-administrators. Adding commits to an open PR does not automatically run tests.
-Use **Run workflow** on its branch to test the latest commit before merging.
-Rerunning an older run tests its original commit. Direct pushes also need a
-passing check on the pushed commit, so test the commit on a branch first.
-Test configuration is repository-scoped. Pages publication uses the
-`github-pages` environment.
+The GitHub Actions `test` check is required on `main`, including for
+administrators. New PR commits need their own passing check. Rerunning an older
+run tests its original commit. Protection requires the check without a separate
+PR-only rule or mandatory reviewer approvals. Test configuration is
+repository-scoped. Pages publication uses the `github-pages` environment.
 
 ## Playwright image and build cache
 
@@ -229,26 +230,35 @@ It must never be run against the existing local `framework1-opencart` project.
 ## GitHub Pages deployment
 
 In **Settings → Pages → Build and deployment**, set **Source** to **GitHub
-Actions**. Under **Settings → Environments → github-pages**, allow deployments
-from the `main` branch. The workflow publishes on direct pushes to `main` and
-manual runs on that branch. PR merges skip tests and publication. PR reports
-are available as artifacts.
+Actions**. Under **Settings → Environments → github-pages**, allow `main` and
+`refs/pull/*/merge`. The latter permits PR workflow deployments. Only eligible
+same-repository PRs and manual runs on `main` publish. Other manual refs receive
+a downloadable preview artifact.
 
-If Actions was paused for credential rotation, first merge the reporter and
-upload checks into `main`. Then select **Actions → Playwright Web, API and DB
-Tests → Enable workflow** before running the acceptance checks below.
+The read-only `report` job downloads verified results by artifact ID and collects
+test names without application credentials. Separate named steps prepare public
+results, restore/install Allure, generate HTML and upload it. The job emits its
+publication-ready output only after the HTML upload succeeds. Failed tests can
+still produce reports while the required `test` check stays failed.
 
-The read-only `report` job downloads the test job's raw artifact by ID, lists
-the checked-out tests without application secrets, and generates a sanitized
-Allure 2 HTML file. It runs after failed tests when raw results exist.
-Only `publish` has `pages: write` and `id-token: write`. It uses `contents: read`
-for the assembly script and `actions: read` for archived HTML. It verifies each
-historical artifact's repository, workflow, event and run ID, and checks that its
-commit belongs to the history of `main`.
-Publications queue while tests can run concurrently. After deployment, CI
-compares the live file with the packaged file before adding the run-specific
-link to Summary. See [report contents and retention](REPORTS.md#open-a-ci-report)
-and [GitHub's Pages workflow requirements](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+The Allure 2.46.1 ZIP is cached by OS, version and pinned SHA-256 checksum.
+[The installer](../scripts/ci/install-allure.sh) downloads it only when absent and
+verifies both downloaded and restored archives before extraction. PR caches can
+be reused by later runs of the same PR. A new PR may have a cold cache. A manual
+run on `main` can populate a cache that subsequent PRs can restore. The report
+job also caches npm downloads; generated results and credentials are excluded
+from these caches. [GitHub cache scope](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#restrictions-for-accessing-a-cache)
+
+Only `publish` has `pages: write` and `id-token: write`. Its read access to actions
+and pull requests supports historical report validation. It checks each retained
+artifact's repository, workflow, event, run ID and source branch. PR history is
+validated through the commit's associated PRs, including after a PR has merged.
+Legacy main-push reports and manual main reports also require their commits to
+belong to `main` history. Publications queue while tests can run concurrently.
+After deployment, CI compares the live file with the packaged file before adding
+**Open Allure report** to Summary. The Pages home retains up to ten eligible
+attempts. [Report contents and retention](REPORTS.md#open-a-ci-report) ·
+[Pages requirements](https://github.com/actions/deploy-pages#security-considerations)
 
 To check both outcomes, manually run `test:master` and then
 `verify:allure-failure` on `main`. The latter requests 999 products from the

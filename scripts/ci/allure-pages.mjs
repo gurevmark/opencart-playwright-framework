@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 const reportLimit = 10;
 const reportName = /^allure-html-([1-9]\d*)-([1-9]\d*)$/;
 
-export function retainedReports(current, artifacts, repo, getRun, isMainCommit) {
+export function retainedReports(current, artifacts, repo, getRun, isMainCommit, getPullRequests = () => []) {
   if (!reportName.test(current)) throw new Error('Invalid current report name');
   const selected = new Set([current]);
   const trusted = new Map();
@@ -15,14 +15,25 @@ export function retainedReports(current, artifacts, repo, getRun, isMainCommit) 
     const match = reportName.exec(artifact.name);
     const source = artifact.workflow_run;
     if (!match || artifact.expired || selected.has(artifact.name) ||
-        String(source?.id) !== match[1] || source.head_branch !== 'main' ||
+        String(source?.id) !== match[1] ||
         source.head_repository_id !== source.repository_id) continue;
     // Artifact names and branch names alone are forgeable by other workflows or PRs.
     if (!trusted.has(source.id)) {
       const run = getRun(source.id);
-      trusted.set(source.id, run.path === '.github/workflows/playwright.yml' &&
-        run.head_repository?.full_name === repo && run.head_branch === 'main' &&
-        ['push', 'workflow_dispatch'].includes(run.event) && isMainCommit(run.head_sha));
+      let eligible = false;
+      if (run?.path === '.github/workflows/playwright.yml' &&
+          run.head_repository?.full_name === repo && run.head_branch === source.head_branch) {
+        if (run.event === 'pull_request') {
+          // run.pull_requests can be empty after the PR is merged or updated.
+          eligible = getPullRequests(run.head_sha).some(pull =>
+            pull.base.ref === 'main' && pull.base.repo?.full_name === repo &&
+            pull.head.ref === run.head_branch && pull.head.repo?.full_name === repo);
+        } else {
+          eligible = run.head_branch === 'main' &&
+            ['push', 'workflow_dispatch'].includes(run.event) && isMainCommit(run.head_sha);
+        }
+      }
+      trusted.set(source.id, eligible);
     }
     if (trusted.get(source.id)) selected.add(artifact.name);
   }
@@ -43,7 +54,10 @@ function assemble(site, current) {
   // The Actions API exposes a short head_branch even for manual runs on tags.
   const isMainCommit = sha => /^[a-f0-9]{40}$/.test(sha) &&
     spawnSync('git', ['merge-base', '--is-ancestor', sha, 'refs/remotes/origin/main']).status === 0;
-  const reports = retainedReports(current, artifacts, repo, id => api(`repos/${repo}/actions/runs/${id}`), isMainCommit);
+  const getPullRequests = sha => api('--paginate', '--slurp',
+    `repos/${repo}/commits/${sha}/pulls?per_page=100`).flat();
+  const reports = retainedReports(current, artifacts, repo,
+    id => api(`repos/${repo}/actions/runs/${id}`), isMainCommit, getPullRequests);
   mkdirSync(site);
   const links = [];
   for (const name of reports) {

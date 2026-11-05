@@ -1,11 +1,8 @@
 name: Playwright Web, API and DB Tests
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
-    types: [opened]
   workflow_dispatch:
     inputs:
       test_suite:
@@ -33,42 +30,7 @@ permissions:
   contents: read
 
 jobs:
-  trigger:
-    name: Select test run
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      pull-requests: read
-    outputs:
-      run-tests: ${{ steps.select.outputs.run-tests }}
-    steps:
-      - name: Skip tests for a push produced by merging a PR
-        id: select
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          run_tests=true
-          if [[ "$EVENT_NAME" == 'push' ]]; then
-            # Match GitHub's merge SHA, including squash and rebase merges.
-            # API failures fail this job and the required test check.
-            merged_pr=$(gh api --paginate \
-              "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls?per_page=100" \
-              | jq -s --arg sha "$GITHUB_SHA" \
-                'any(.[][]; .merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha)')
-            if [[ "$merged_pr" == 'true' ]]; then
-              run_tests=false
-              echo 'PR merge detected. Tests already ran before merging.' >> "$GITHUB_STEP_SUMMARY"
-            fi
-          fi
-          echo "run-tests=$run_tests" >> "$GITHUB_OUTPUT"
-
   test:
-    needs: trigger
-    # A failed selector must fail the required check instead of skipping it.
-    if: ${{ always() && needs.trigger.outputs.run-tests != 'false' }}
     timeout-minutes: 60
     runs-on: ubuntu-latest
     outputs:
@@ -122,13 +84,16 @@ jobs:
       OPENCART_ADMIN_EMAIL: admin@example.test
 
     steps:
-      - name: Require a successful selector and a trusted test source
+      - name: Require a trusted test source
         env:
-          TRIGGER_RESULT: ${{ needs.trigger.result }}
-          TRUSTED_SOURCE: ${{ github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]')) }}
+          TRUSTED_SOURCE: >-
+            ${{ github.actor != 'dependabot[bot]' &&
+                (github.event_name != 'pull_request' ||
+                 (github.event.pull_request.head.repo.full_name == github.repository &&
+                  github.event.pull_request.user.login != 'dependabot[bot]')) }}
         run: |
-          if [[ "$TRIGGER_RESULT" != 'success' || "$TRUSTED_SOURCE" != 'true' ]]; then
-            echo '::error::Tests require a successful trigger check and a trusted same-repository source.'
+          if [[ "$TRUSTED_SOURCE" != 'true' ]]; then
+            echo '::error::Tests require a trusted same-repository source.'
             exit 1
           fi
 
@@ -241,30 +206,42 @@ jobs:
     permissions:
       contents: read
       actions: read
+    env:
+      ALLURE_VERSION: 2.46.1
+      ALLURE_SHA256: d25c519bbde940dc953cff8901130ce18b73013dc19a8f8b90b8b4b1c5eb252f
+      ALLURE_NO_ANALYTICS: 'true'
+      TEST_BROWSER: ${{ inputs.browser || 'chromium' }}
+      TEST_ATTEMPT: ${{ needs.test.outputs.test-attempt }}
+      PUBLISH_REPORT: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/main' }}
     outputs:
-      name: ${{ steps.generate.outputs.name }}
+      name: ${{ steps.artifact.outputs.name }}
+      publish: ${{ steps.ready.outputs.publish }}
       test-attempt: ${{ needs.test.outputs.test-attempt }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout report tools
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+
+      - name: Download verified Allure results
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.test.outputs.allure-id }}
           github-token: ${{ github.token }}
           merge-multiple: true
           path: ${{ runner.temp }}/raw-allure
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+
+      - name: Set up Node.js for reporting
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: lts/*
-      - name: Generate a self-contained Allure 2 report
-        id: generate
+          cache: npm
+
+      - name: Install report dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Discover public test names without credentials
         env:
-          TEST_ATTEMPT: ${{ needs.test.outputs.test-attempt }}
-          TEST_BROWSER: ${{ inputs.browser || 'chromium' }}
-          REPORT_PREFIX: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && 'allure-html' || 'allure-preview' }}
-          ALLURE_NO_ANALYTICS: 'true'
-          # Discovery needs only these public fixture selectors. No test credentials.
           PRODUCT_ID: '1'
           USER_ID: '1'
           CART_ID: '1'
@@ -272,40 +249,60 @@ jobs:
           START_DATE: '2020-01-01'
           END_DATE: '2020-03-02'
         run: |
-          if ! compgen -G "$RUNNER_TEMP/raw-allure/*-result.json" > /dev/null; then
-            echo 'No completed Allure test cases to publish.'
-            exit 0
-          fi
-          npm ci --ignore-scripts --no-audit --no-fund
           if ! ./node_modules/.bin/playwright test --list --reporter=json --project="$TEST_BROWSER" > "$RUNNER_TEMP/catalog.json"; then
-            echo '::warning::Test discovery failed. Publishing numbered cases without runtime names.'
+            echo '::warning::Test discovery failed. Publishing numbered cases.'
             printf '{"suites":[]}\n' > "$RUNNER_TEMP/catalog.json"
           fi
-          node scripts/ci/public-allure.mjs "$RUNNER_TEMP/catalog.json" "$RUNNER_TEMP/raw-allure" "$RUNNER_TEMP/public-results" "$TEST_BROWSER"
-          cd "$RUNNER_TEMP"
-          curl --fail --silent --show-error --location --retry 3 \
-            https://github.com/allure-framework/allure2/releases/download/2.46.1/allure-2.46.1.zip -o allure.zip
-          echo 'd25c519bbde940dc953cff8901130ce18b73013dc19a8f8b90b8b4b1c5eb252f  allure.zip' | sha256sum -c -
-          unzip -q allure.zip
-          allure-2.46.1/bin/allure generate --single-file --name "Playwright run $GITHUB_RUN_ID (attempt $TEST_ATTEMPT)" public-results -o public-report
-          test -s public-report/index.html
-          echo "name=$REPORT_PREFIX-$GITHUB_RUN_ID-$TEST_ATTEMPT" >> "$GITHUB_OUTPUT"
-      - name: Keep the browser-ready report
-        if: ${{ steps.generate.outputs.name != '' }}
+
+      - name: Prepare public Allure results
+        run: node scripts/ci/public-allure.mjs "$RUNNER_TEMP/catalog.json" "$RUNNER_TEMP/raw-allure" "$RUNNER_TEMP/public-results" "$TEST_BROWSER"
+
+      - name: Restore Allure archive cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/allure-cache
+          key: allure-${{ runner.os }}-${{ env.ALLURE_VERSION }}-${{ env.ALLURE_SHA256 }}
+
+      - name: Install Allure from a verified archive
+        env:
+          ALLURE_CACHE_DIR: ${{ runner.temp }}/allure-cache
+          ALLURE_HOME: ${{ runner.temp }}/allure-cli
+        run: bash scripts/ci/install-allure.sh
+
+      - name: Generate browser-ready Allure HTML
+        env:
+          ALLURE_HOME: ${{ runner.temp }}/allure-cli
+        run: |
+          "$ALLURE_HOME/allure-$ALLURE_VERSION/bin/allure" generate --single-file \
+            --name "Playwright run $GITHUB_RUN_ID (attempt $TEST_ATTEMPT)" \
+            "$RUNNER_TEMP/public-results" -o "$RUNNER_TEMP/public-report"
+          test -s "$RUNNER_TEMP/public-report/index.html"
+
+      - name: Name report artifact
+        id: artifact
+        run: |
+          prefix=allure-preview
+          if [[ "$PUBLISH_REPORT" == 'true' ]]; then
+            prefix=allure-html
+          fi
+          echo "name=$prefix-$GITHUB_RUN_ID-$TEST_ATTEMPT" >> "$GITHUB_OUTPUT"
+
+      - name: Upload browser-ready Allure report
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ${{ steps.generate.outputs.name }}
+          name: ${{ steps.artifact.outputs.name }}
           path: ${{ runner.temp }}/public-report/index.html
           if-no-files-found: error
           retention-days: 30
 
+      - name: Mark report ready for publication
+        id: ready
+        run: echo "publish=$PUBLISH_REPORT" >> "$GITHUB_OUTPUT"
+
   publish:
     name: Publish Allure to GitHub Pages
     needs: report
-    if: >-
-      !cancelled() && needs.report.result == 'success' && needs.report.outputs.name != '' &&
-      github.ref == 'refs/heads/main' &&
-      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: ${{ !cancelled() && needs.report.result == 'success' && needs.report.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:
@@ -316,11 +313,13 @@ jobs:
       actions: read
       pages: write
       id-token: write
+      pull-requests: read
     environment:
       name: github-pages
       url: ${{ steps.summary.outputs.url }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Checkout publication tools and main history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Keep the executed helper pinned while fetching main's history for provenance.
           ref: ${{ github.sha }}
@@ -331,7 +330,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPORT_NAME: ${{ needs.report.outputs.name }}
         run: node scripts/ci/allure-pages.mjs "$RUNNER_TEMP/site" "$REPORT_NAME"
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+      - name: Upload the Pages site
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           name: github-pages-${{ github.run_attempt }}
           path: ${{ runner.temp }}/site
@@ -351,5 +351,5 @@ jobs:
           curl --fail --silent --show-error --location --retry 8 --retry-all-errors \
             --retry-max-time 120 --max-time 20 "$url" -o "$RUNNER_TEMP/live.html"
           cmp "$RUNNER_TEMP/site/$path" "$RUNNER_TEMP/live.html"
-          printf '[Открыть Allure-отчёт](%s)\n' "$url" >> "$GITHUB_STEP_SUMMARY"
+          printf '[Open Allure report](%s)\n' "$url" >> "$GITHUB_STEP_SUMMARY"
           printf 'url=%s\n' "$url" >> "$GITHUB_OUTPUT"

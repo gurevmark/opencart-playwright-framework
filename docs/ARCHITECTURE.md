@@ -143,7 +143,7 @@ Console assertion output follows its own path and may contain API response data.
 
 The CI test job uploads the diagnostic files only after the completion marker
 and privacy checks pass. A separate job creates reduced Allure HTML from checked
-results and credential-free catalog names. Eligible `main` runs publish it to
+results and credential-free catalog names. Eligible same-repository PRs and manual runs on `main` publish it to
 Pages; other eligible refs receive a downloadable preview. For local viewing,
 the separate `opencart-allure` service reads filtered JSON from `host` or
 `local-docker`. [CI workflow](CI.md#github-pages-deployment) · [Local reporting](REPORTS.md#local-reports)
