@@ -215,6 +215,7 @@ jobs:
       PUBLISH_REPORT: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/main' }}
     outputs:
       name: ${{ steps.artifact.outputs.name }}
+      artifact-url: ${{ steps.html.outputs.artifact-url }}
       publish: ${{ steps.ready.outputs.publish }}
       test-attempt: ${{ needs.test.outputs.test-attempt }}
     steps:
@@ -288,6 +289,7 @@ jobs:
           echo "name=$prefix-$GITHUB_RUN_ID-$TEST_ATTEMPT" >> "$GITHUB_OUTPUT"
 
       - name: Upload browser-ready Allure report
+        id: html
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ steps.artifact.outputs.name }}
@@ -335,8 +337,22 @@ jobs:
         with:
           name: github-pages-${{ github.run_attempt }}
           path: ${{ runner.temp }}/site
+
+      - name: Check for an earlier deployment of this commit
+        id: previous
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          repeat=false
+          previous=$(gh api "repos/$GITHUB_REPOSITORY/pages/deployments/$GITHUB_SHA" --jq '.status' 2>/dev/null || true)
+          if [[ "$previous" == 'succeed' ]]; then
+            repeat=true
+          fi
+          echo "repeat=$repeat" >> "$GITHUB_OUTPUT"
+
       - name: Deploy to GitHub Pages
         id: deploy
+        continue-on-error: ${{ steps.previous.outputs.repeat == 'true' }}
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
         with:
           artifact_name: github-pages-${{ github.run_attempt }}
@@ -345,11 +361,7 @@ jobs:
         env:
           PAGE_URL: ${{ steps.deploy.outputs.page_url }}
           TEST_ATTEMPT: ${{ needs.report.outputs.test-attempt }}
-        run: |
-          path="runs/$GITHUB_RUN_ID/$TEST_ATTEMPT/index.html"
-          url="${PAGE_URL%/}/$path"
-          curl --fail --silent --show-error --location --retry 8 --retry-all-errors \
-            --retry-max-time 120 --max-time 20 "$url" -o "$RUNNER_TEMP/live.html"
-          cmp "$RUNNER_TEMP/site/$path" "$RUNNER_TEMP/live.html"
-          printf '[Open Allure report](%s)\n' "$url" >> "$GITHUB_STEP_SUMMARY"
-          printf 'url=%s\n' "$url" >> "$GITHUB_OUTPUT"
+          PAGES_DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          ALLOW_REPORT_FALLBACK: ${{ steps.previous.outputs.repeat }}
+          REPORT_ARTIFACT_URL: ${{ needs.report.outputs.artifact-url }}
+        run: bash scripts/ci/verify-pages.sh

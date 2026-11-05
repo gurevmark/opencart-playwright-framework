@@ -260,6 +260,15 @@ After deployment, CI compares the live file with the packaged file before adding
 attempts. [Report contents and retention](REPORTS.md#open-a-ci-report) ·
 [Pages requirements](https://github.com/actions/deploy-pages#security-considerations)
 
+GitHub Pages can reuse an earlier deployment for the same commit and keep serving
+its old files. Before deploying, CI checks whether that exact commit already has
+a successful Pages deployment. If such a repeat fails deployment or live-file
+verification, Summary provides **Download Allure report** for the verified artifact
+and the job completes with a warning. A first-time deployment or verification
+failure still fails the job. Assembly, artifact upload and privacy errors always
+fail. [Upstream issue](https://github.com/actions/deploy-pages/issues/383) ·
+[Live verification](../scripts/ci/verify-pages.sh)
+
 To check both outcomes, manually run `test:master` and then
 `verify:allure-failure` on `main`. The latter requests 999 products from the
 small fixture catalog and runs one existing assertion with retries disabled.

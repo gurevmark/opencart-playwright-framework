@@ -34,6 +34,12 @@ can still build HTML. The test job and the overall run stay red. Cancellation,
 missing result files or a failed upload check skip publication. The Summary
 link appears only after deployment and verification of the live HTML.
 
+For a previously deployed commit, GitHub Pages can keep serving the earlier
+site despite reporting deployment success. If CI cannot verify the new report,
+Summary provides **Download Allure report** for this run's artifact and records
+a warning. First-time deployment failures still fail the publication job.
+[Publication verification](CI.md#github-pages-deployment)
+
 The Pages home lists up to ten attempts. Each deployment includes the current
 attempt and the nine newest other eligible HTML artifacts still available.
 The HTML artifacts expire after 30 days. The site is pruned on the next

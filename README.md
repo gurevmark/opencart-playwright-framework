@@ -71,7 +71,9 @@ Open a PR targeting `main` to run the full suite in Chromium. New commits and
 reopening the PR trigger a fresh run. The required `test` check must pass before
 merging. Merging does not start another run. **Run workflow** remains available
 for manual suite and browser selection. Eligible PR runs provide **Open Allure
-report** in Summary and downloadable reports. [CI setup](docs/CI.md) ·
+report** in Summary and downloadable reports. If Pages cannot refresh a
+previously deployed commit, Summary provides **Download Allure report**.
+[CI setup](docs/CI.md) ·
 [Reports](docs/REPORTS.md)
 
 ## Find what you need
