@@ -13,6 +13,7 @@ export TEST_GID="$(id -g)"
 
 # Create writable bind mounts as the runner user, then use that same UID/GID
 # inside Docker so artifact uploads can read every generated report and trace.
+node scripts/ci/reporters/paths.cjs "${PLAYWRIGHT_REPORTS_DIR:-reports}" "${PLAYWRIGHT_ALLURE_DIR:-allure-results}" "${PLAYWRIGHT_RESULTS_DIR:-test-results}"
 mkdir -p "${PLAYWRIGHT_REPORTS_DIR:-reports}" "${PLAYWRIGHT_ALLURE_DIR:-allure-results}" "${PLAYWRIGHT_RESULTS_DIR:-test-results}"
 
 # Compose joins the existing project's bridge network and forwards only the

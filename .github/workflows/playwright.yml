@@ -20,6 +20,7 @@ on:
           - test:web
           - test:db
           - test:datadriven
+          - verify:allure-failure
         default: test:master
       browser:
         description: Select browser (headless)
@@ -40,6 +41,9 @@ jobs:
          github.event.pull_request.user.login != 'dependabot[bot]'))
     timeout-minutes: 60
     runs-on: ubuntu-latest
+    outputs:
+      allure-id: ${{ steps.raw.outputs.artifact-id }}
+      test-attempt: ${{ github.run_attempt }}
     env:
       CI: 'true'
       APP_ENV: qa
@@ -126,6 +130,9 @@ jobs:
           cache-from: type=gha,scope=playwright-linux-amd64
           cache-to: type=gha,scope=playwright-linux-amd64,mode=max
 
+      - name: Exercise report privacy on passed, failed and retried tests
+        run: docker run --rm --user "$(id -u):$(id -g)" --network none "$PLAYWRIGHT_TEST_IMAGE" node --test scripts/ci/regressions/report-privacy.test.mjs
+
       - name: Start fresh OpenCart, MySQL, FakeStore and MongoDB
         id: stack
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --project-name "$COMPOSE_PROJECT_NAME" up --build --wait --wait-timeout 300
@@ -135,12 +142,35 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.ci.yml --project-name "$COMPOSE_PROJECT_NAME" exec -T fakestore npm test
           docker compose -f docker-compose.yml -f docker-compose.ci.yml --project-name "$COMPOSE_PROJECT_NAME" exec -T opencart php /usr/local/lib/opencart/http-server.test.php
 
+      - name: Require fresh CI report directories
+        run: |
+          for path in reports allure-results test-results; do
+            if [[ -e "$path" || -L "$path" ]]; then
+              echo 'Refusing to upload a mixture of current and pre-existing test artifacts.' >&2
+              exit 1
+            fi
+          done
+
       - name: Run Playwright web, API and database tests in Docker
         id: tests
-        run: bash scripts/ci/run-tests-in-docker.sh "$TEST_SUITE" "$TEST_BROWSER"
+        run: |
+          if [[ "$TEST_SUITE" == 'verify:allure-failure' ]]; then
+            # The controlled catalog has fewer than 999 products. Exercise one real assertion.
+            LIMIT=999 bash scripts/ci/run-tests-in-docker.sh test:api "$TEST_BROWSER" \
+              tests/api/products.spec.ts --grep 'GET - Products with limit @master' --retries=0
+          else
+            bash scripts/ci/run-tests-in-docker.sh "$TEST_SUITE" "$TEST_BROWSER"
+          fi
+
+      - name: Verify both diagnostic artifacts before upload
+        id: privacy
+        if: ${{ !cancelled() && (steps.tests.outcome == 'success' || steps.tests.outcome == 'failure') }}
+        run: |
+          test -f test-results/run/report-artifacts.ready
+          python3 scripts/ci/verify-report-privacy.py reports allure-results
 
       - name: Upload HTML and JUnit reports
-        if: ${{ !cancelled() && (steps.tests.outcome == 'success' || steps.tests.outcome == 'failure') }}
+        if: ${{ !cancelled() && steps.privacy.outcome == 'success' }}
         uses: actions/upload-artifact@v7.0.2
         with:
           name: playwright-report
@@ -149,7 +179,8 @@ jobs:
           retention-days: 7
 
       - name: Upload Allure results
-        if: ${{ !cancelled() && (steps.tests.outcome == 'success' || steps.tests.outcome == 'failure') }}
+        id: raw
+        if: ${{ !cancelled() && steps.privacy.outcome == 'success' }}
         uses: actions/upload-artifact@v7.0.2
         with:
           name: allure-results
@@ -160,3 +191,125 @@ jobs:
       - name: Remove this run's containers and volumes
         if: ${{ always() && steps.validate.outcome == 'success' }}
         run: docker compose -f docker-compose.yml -f docker-compose.ci.yml --project-name "$COMPOSE_PROJECT_NAME" down --volumes --remove-orphans
+
+  report:
+    name: Build public Allure HTML
+    needs: test
+    if: ${{ !cancelled() && needs.test.outputs.allure-id != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      name: ${{ steps.generate.outputs.name }}
+      test-attempt: ${{ needs.test.outputs.test-attempt }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.test.outputs.allure-id }}
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/raw-allure
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+      - name: Generate a self-contained Allure 2 report
+        id: generate
+        env:
+          TEST_ATTEMPT: ${{ needs.test.outputs.test-attempt }}
+          TEST_BROWSER: ${{ inputs.browser || 'chromium' }}
+          REPORT_PREFIX: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && 'allure-html' || 'allure-preview' }}
+          ALLURE_NO_ANALYTICS: 'true'
+          # Discovery needs only these public fixture selectors. No test credentials.
+          PRODUCT_ID: '1'
+          USER_ID: '1'
+          CART_ID: '1'
+          LIMIT: '3'
+          START_DATE: '2020-01-01'
+          END_DATE: '2020-03-02'
+        run: |
+          if ! compgen -G "$RUNNER_TEMP/raw-allure/*-result.json" > /dev/null; then
+            echo 'No completed Allure test cases to publish.'
+            exit 0
+          fi
+          npm ci --ignore-scripts --no-audit --no-fund
+          if ! ./node_modules/.bin/playwright test --list --reporter=json --project="$TEST_BROWSER" > "$RUNNER_TEMP/catalog.json"; then
+            echo '::warning::Test discovery failed. Publishing numbered cases without runtime names.'
+            printf '{"suites":[]}\n' > "$RUNNER_TEMP/catalog.json"
+          fi
+          node scripts/ci/public-allure.mjs "$RUNNER_TEMP/catalog.json" "$RUNNER_TEMP/raw-allure" "$RUNNER_TEMP/public-results" "$TEST_BROWSER"
+          cd "$RUNNER_TEMP"
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/allure-framework/allure2/releases/download/2.46.1/allure-2.46.1.zip -o allure.zip
+          echo 'd25c519bbde940dc953cff8901130ce18b73013dc19a8f8b90b8b4b1c5eb252f  allure.zip' | sha256sum -c -
+          unzip -q allure.zip
+          allure-2.46.1/bin/allure generate --single-file --name "Playwright run $GITHUB_RUN_ID (attempt $TEST_ATTEMPT)" public-results -o public-report
+          test -s public-report/index.html
+          echo "name=$REPORT_PREFIX-$GITHUB_RUN_ID-$TEST_ATTEMPT" >> "$GITHUB_OUTPUT"
+      - name: Keep the browser-ready report
+        if: ${{ steps.generate.outputs.name != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.generate.outputs.name }}
+          path: ${{ runner.temp }}/public-report/index.html
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    name: Publish Allure to GitHub Pages
+    needs: report
+    if: >-
+      !cancelled() && needs.report.result == 'success' && needs.report.outputs.name != '' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: allure-github-pages
+      queue: max
+    permissions:
+      contents: read
+      actions: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.summary.outputs.url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Keep the executed helper pinned while fetching main's history for provenance.
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Assemble the last ten trusted reports
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPORT_NAME: ${{ needs.report.outputs.name }}
+        run: node scripts/ci/allure-pages.mjs "$RUNNER_TEMP/site" "$REPORT_NAME"
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          name: github-pages-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/site
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
+      - name: Verify published HTML and link it from the run Summary
+        id: summary
+        env:
+          PAGE_URL: ${{ steps.deploy.outputs.page_url }}
+          TEST_ATTEMPT: ${{ needs.report.outputs.test-attempt }}
+        run: |
+          path="runs/$GITHUB_RUN_ID/$TEST_ATTEMPT/index.html"
+          url="${PAGE_URL%/}/$path"
+          curl --fail --silent --show-error --location --retry 8 --retry-all-errors \
+            --retry-max-time 120 --max-time 20 "$url" -o "$RUNNER_TEMP/live.html"
+          cmp "$RUNNER_TEMP/site/$path" "$RUNNER_TEMP/live.html"
+          printf '[Открыть Allure-отчёт](%s)\n' "$url" >> "$GITHUB_STEP_SUMMARY"
+          printf 'url=%s\n' "$url" >> "$GITHUB_OUTPUT"
