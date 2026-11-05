@@ -65,6 +65,15 @@ docker compose ps
 
 Check that the storefront and MySQL settings refer to the same test installation before running customer scenarios. For host runs, use `--output=test-results/host` to keep Docker captures. Full-suite discovery needs six FakeStore selectors. File-scoped examples, setup steps and their side effects are in the [development guide](docs/DEVELOPMENT.md).
 
+## GitHub CI
+
+Open a PR targeting `main` to run the full suite in Chromium. New commits and
+reopening the PR trigger a fresh run. The required `test` check must pass before
+merging. Merging does not start another run. **Run workflow** remains available
+for manual suite and browser selection. Eligible PR runs provide **Open Allure
+report** in Summary and downloadable reports. [CI setup](docs/CI.md) ·
+[Reports](docs/REPORTS.md)
+
 ## Find what you need
 
 | Task | Where to start |
