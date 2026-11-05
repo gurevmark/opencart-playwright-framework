@@ -24,9 +24,10 @@ the attempt that produced the test results, for example `runs/12345/2/index.html
 
 | Run | Browser-ready Allure HTML |
 | --- | --- |
-| Push to `main` or manual run on the `main` branch | Pages link in Summary and an `allure-html-<run>-<attempt>` artifact |
+| Direct push to `main` or manual run on the `main` branch | Pages link in Summary and an `allure-html-<run>-<attempt>` artifact |
+| Push produced by a PR merge | Tests and reports are skipped |
 | Same-repository PR or manual run on another ref | `allure-preview-<run>-<attempt>` artifact in Actions |
-| Fork PR or Dependabot | The secret-dependent tests are skipped |
+| Fork PR or Dependabot | The required `test` check fails before executing untrusted code |
 
 When tests fail but their result files pass the upload check, the report job
 can still build HTML. The test job and the overall run stay red. Cancellation,

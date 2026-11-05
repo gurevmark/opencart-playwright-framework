@@ -9,7 +9,7 @@
 | Test an existing OpenCart installation or another API endpoint | Set host addresses and test credentials in your local configuration. Pass `--output=test-results/host` to keep Docker captures separate. [Host runs and test discovery](#existing-host-side-local-runs) |
 | Investigate an Actions failure | Open the first failed step in the `test` job to distinguish a setup error, test failure or failed artifact check. For published runs, open the Allure link on the run's **Summary**. [Report formats and access](REPORTS.md#open-a-ci-report) |
 
-The workflow has three jobs. `test` builds the stack, runs the suite and checks the diagnostic artifacts before upload. `report` builds HTML when the checked artifact contains at least one test result. `publish` deploys it to Pages for pushes to `main` and manual runs on that branch. Fork pull requests and Dependabot runs skip the job that needs repository secrets. [Workflow definition](../.github/workflows/playwright.yml)
+The workflow has four jobs. `trigger` identifies pushes produced by PR merges and skips their tests. `test` builds the stack, runs the suite and checks the diagnostic artifacts before upload. `report` builds HTML when the checked artifact contains at least one test result. `publish` deploys it to Pages for direct pushes to `main` and manual runs on that branch. Fork pull requests and Dependabot runs fail the required check before checking out code or using repository secrets. [Workflow definition](../.github/workflows/playwright.yml)
 
 Automatic CI selects **94 Playwright scenarios** in one headless Chromium project
 on an Ubuntu GitHub-hosted runner. Of these, **27** cover OpenCart web/database
@@ -58,10 +58,20 @@ The workflow display name remains **Playwright Web, API and DB Tests**. Its
 **Check FakeStore API and OpenCart URL helpers** step checks the two application
 helpers before the separate step that runs the Playwright Web/API/DB suite.
 
-The workflow runs on pushes and pull requests targeting `main`, and from
-**Actions → Playwright Web, API and DB Tests → Run workflow**. Fork pull requests
-and Dependabot runs skip the secret-dependent job. Test configuration is
-repository-scoped. Pages publication uses the `github-pages` environment.
+Automatic tests run on direct pushes to `main` and when a PR targeting `main`
+is opened. GitHub also creates a push run after a PR merge. The `trigger` job
+uses GitHub's associated PR and merge SHA to skip tests and reports in that run,
+including squash and rebase merges. A failed API lookup fails the required check.
+Manual runs remain available under **Actions → Playwright Web, API and DB Tests
+→ Run workflow**.
+
+The `test` check from GitHub Actions is required on `main`, including for
+administrators. Adding commits to an open PR does not automatically run tests.
+Use **Run workflow** on its branch to test the latest commit before merging.
+Rerunning an older run tests its original commit. Direct pushes also need a
+passing check on the pushed commit, so test the commit on a branch first.
+Test configuration is repository-scoped. Pages publication uses the
+`github-pages` environment.
 
 ## Playwright image and build cache
 
@@ -220,8 +230,9 @@ It must never be run against the existing local `framework1-opencart` project.
 
 In **Settings → Pages → Build and deployment**, set **Source** to **GitHub
 Actions**. Under **Settings → Environments → github-pages**, allow deployments
-from the `main` branch. The workflow publishes on pushes to `main` and manual
-runs on that branch. All PRs and other refs are excluded from deployment.
+from the `main` branch. The workflow publishes on direct pushes to `main` and
+manual runs on that branch. PR merges skip tests and publication. PR reports
+are available as artifacts.
 
 If Actions was paused for credential rotation, first merge the reporter and
 upload checks into `main`. Then select **Actions → Playwright Web, API and DB

@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    types: [opened]
   workflow_dispatch:
     inputs:
       test_suite:
@@ -32,13 +33,42 @@ permissions:
   contents: read
 
 jobs:
+  trigger:
+    name: Select test run
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      run-tests: ${{ steps.select.outputs.run-tests }}
+    steps:
+      - name: Skip tests for a push produced by merging a PR
+        id: select
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          run_tests=true
+          if [[ "$EVENT_NAME" == 'push' ]]; then
+            # Match GitHub's merge SHA, including squash and rebase merges.
+            # API failures fail this job and the required test check.
+            merged_pr=$(gh api --paginate \
+              "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls?per_page=100" \
+              | jq -s --arg sha "$GITHUB_SHA" \
+                'any(.[][]; .merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha)')
+            if [[ "$merged_pr" == 'true' ]]; then
+              run_tests=false
+              echo 'PR merge detected. Tests already ran before merging.' >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+          echo "run-tests=$run_tests" >> "$GITHUB_OUTPUT"
+
   test:
-    # Fork and Dependabot code must never run in a job with repository secrets.
-    if: >-
-      github.actor != 'dependabot[bot]' &&
-      (github.event_name != 'pull_request' ||
-        (github.event.pull_request.head.repo.full_name == github.repository &&
-         github.event.pull_request.user.login != 'dependabot[bot]'))
+    needs: trigger
+    # A failed selector must fail the required check instead of skipping it.
+    if: ${{ always() && needs.trigger.outputs.run-tests != 'false' }}
     timeout-minutes: 60
     runs-on: ubuntu-latest
     outputs:
@@ -92,6 +122,16 @@ jobs:
       OPENCART_ADMIN_EMAIL: admin@example.test
 
     steps:
+      - name: Require a successful selector and a trusted test source
+        env:
+          TRIGGER_RESULT: ${{ needs.trigger.result }}
+          TRUSTED_SOURCE: ${{ github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]')) }}
+        run: |
+          if [[ "$TRIGGER_RESULT" != 'success' || "$TRUSTED_SOURCE" != 'true' ]]; then
+            echo '::error::Tests require a successful trigger check and a trusted same-repository source.'
+            exit 1
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
         with:
