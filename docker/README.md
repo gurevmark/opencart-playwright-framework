@@ -1,5 +1,8 @@
 # Local OpenCart containers
 
+For the separate local Allure container, report-generation commands and persisted
+history, see [local test reports](../docs/REPORTS.md).
+
 The course's OpenCart 3.0.3.8 runtime remains on PHP 7.4 for compatibility. Its Debian 11 package sources now use the official Debian archive so fresh CI builds can download packages after Bullseye's retirement. Expiry checks are disabled only for the archived source metadata; package signature verification remains enabled. A PHP/OpenCart runtime upgrade is a separate change. See [Debian's archive](https://www.debian.org/distrib/archive) and [Bullseye LTS dates](https://wiki.debian.org/LTS/Bullseye).
 
 The root `docker-compose.yml` manages the existing `framework1-opencart` Compose project. Its project name preserves the existing `framework1-opencart_opencart_database` and `framework1-opencart_opencart_files` named volumes. The storefront is at http://localhost/opencart/upload/.

@@ -23,6 +23,14 @@ case "$browser" in
   *) echo 'Unsupported browser.' >&2; exit 2 ;;
 esac
 
+# An alternate config can replace every artifact writer before this project's
+# config is even loaded. Keep the normal Docker entry point on its own config.
+for arg in "$@"; do
+  case "$arg" in
+    -c*|--config|--config=*) echo 'Use the project Playwright config.' >&2; exit 2 ;;
+  esac
+done
+
 # Keep the configured reporters. Extra arguments support test paths and --list.
 exec npx --no-install playwright test --grep "@$tag(\\s|$)" \
   --project="$browser" --output=test-results "$@"

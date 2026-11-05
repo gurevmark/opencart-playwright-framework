@@ -16,6 +16,10 @@ node_modules/
 /custom-report/
 /allure-results/
 /allure-report/
+/allure-results*.zip
+/allure-results [0-9]*/
+/playwright-report*.zip
+/playwright-report [0-9]*/
 /PDF/
 
 # Local browser sessions, editor/OS state, and build output

@@ -4,9 +4,8 @@ import { defineConfig, devices } from '@playwright/test';
  * Read environment variables from file.
  * https://github.com/motdotla/dotenv
  */
-import dotenv from 'dotenv';
-import path from 'path';
-dotenv.config({ path: path.resolve(__dirname, '.env'), quiet: true });
+const { configureReportRun } = require('./scripts/ci/reporters/options.cjs');
+configureReportRun(process.argv.slice(2), __dirname);
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -25,11 +24,7 @@ export default defineConfig({
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: [
     ['list'],
-    ['html', { open: 'never', outputFolder: 'reports' }],
-    ['junit', { outputFile: 'reports/results.xml' }],
-    // Enable after the custom reporter is created in step 5.
-    // ['./utils/CustomReporter.ts'],
-    ['allure-playwright', { outputFolder: 'allure-results' }],
+    ['./scripts/ci/reporters/artifacts.cjs'],
   ],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
