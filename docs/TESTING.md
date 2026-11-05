@@ -3,7 +3,7 @@
 Use this guide to choose a check, run the current suites, and interpret the result.
 Return to the [documentation index](README.md) for the wider project map, read
 [configuration](CONFIGURATION.md) before connecting to a target, and follow
-[contribution guidance](../CONTRIBUTING.md) when changing tests.
+[development](DEVELOPMENT.md) and [contribution guidance](../CONTRIBUTING.md) when changing tests.
 
 The executable sources are [Playwright configuration](../playwright.config.ts),
 the [suite wrapper](../scripts/ci/run-tests.sh), the specs under `tests/`, and the
@@ -14,17 +14,17 @@ test is not evidence that the current target passes.
 
 | Check | Needs running applications? | What it establishes |
 | --- | --- | --- |
-| `node --test scripts/ci/*.test.mjs` | No | Environment-validator behavior and local Docker configuration generation/mapping, using synthetic inputs and temporary files |
+| `node --test scripts/ci/*.test.mjs` | No | 14 checks cover CI environment validation, the local Docker helper, Allure input/history handling and Pages artifact selection |
 | `php docker/opencart/http-server.test.php` | No; needs a PHP CLI | OpenCart public/internal URL-selection helper behavior |
-| Playwright `--list` | No; needs installed npm dependencies and discovery-time configuration | Specs import and the requested tests are registered |
+| Host-side Playwright `--list` | No. Requires installed npm dependencies and any discovery-time settings for the selected files. | Lists registered tests. The normal reporter also writes reports. |
 | TypeScript check | No; needs a separately supplied TypeScript compiler | Static checks covered by `tsconfig.json` |
 | Playwright `@api` | FakeStore-compatible API | HTTP response, schema, filter, authentication, and simulated-write contracts |
 | Playwright `tests/web` | OpenCart storefront | Customer and shopping behavior through a browser |
 | Playwright `@db` | MySQL and, for the customer journeys, OpenCart storefront/Admin | Customer persistence/lifecycle and SQL connection cleanup |
-| Controlled FakeStore service `npm test` | Its running API and authenticated MongoDB | Service integration, JWT, database permissions, simulated writes, and fixture initialization |
+| [Controlled FakeStore integration checks](../docker/fakestore/integration.test.mjs) | Its running API and authenticated MongoDB | Service integration, JWT, database permissions, simulated writes, and fixture initialization |
 
 The last row runs inside the controlled API container as part of the local Docker
-helper and CI. It is an integration check, not an offline Node unit suite.
+helper and CI. CI also runs four reporter regression tests in its built Playwright image. [CI workflow](../.github/workflows/playwright.yml)
 
 ## Prepare a host-side run
 
@@ -61,45 +61,57 @@ variable names and the host/container distinction.
 
 ## Discover without executing tests
 
+To preserve existing reports, run the credential-free JSON catalog command in
+a separate checkout with the six documented public fixture selectors. The
+project permits that exact invocation as an exception to its reporter guard.
+[Catalog command and prerequisites](CI.md#existing-host-side-local-runs)
+
+In an existing host checkout, these commands use the normal reporters. They
+replace the host HTML/JUnit and append skipped entries to the host Allure results.
+Save existing reports you need before listing. The explicit host output path
+also keeps Docker captures outside the directory Playwright clears for a real
+host run.
+
 ```sh
-# List the complete suite for one project, using only the console reporter.
-bash scripts/ci/run-tests.sh test:master chromium --list --reporter=list
+# Complete suite for one project. Configure the six FakeStore selectors first.
+bash scripts/ci/run-tests.sh test:master chromium --output=test-results/host --list
 
-# Limit imported files to the storefront specs.
-bash scripts/ci/run-tests.sh test:web chromium tests/web --list --reporter=list
+# Only collect the storefront files.
+bash scripts/ci/run-tests.sh test:web chromium tests/web --output=test-results/host --list
 
-# Inspect the DB-only connection test without loading the other specs.
-bash scripts/ci/run-tests.sh test:db chromium tests/db/db-client.spec.ts --list --reporter=list
+# Collect the DB-only connection test.
+bash scripts/ci/run-tests.sh test:db chromium tests/db/db-client.spec.ts --output=test-results/host --list
 ```
 
-Discovery imports spec modules and reads their JSON data. In particular,
-`utils/fakestoreTestSupport.ts` reads `PRODUCT_ID`, `USER_ID`, `CART_ID`, `LIMIT`,
-`START_DATE`, and `END_DATE` during import. The wrapper's tag filter does not limit
-which files are imported: an unqualified `test:web` or `test:db` invocation can
-therefore require these API settings too. Add a file/directory argument when only
-that area's discovery is intended.
-
-`--list` does not verify browser launch, network access, credentials, application
-state, database permissions, or assertions. The console reporter avoids generating
-the usual HTML/JUnit/Allure outputs for these inventory commands.
+Discovery imports spec modules and reads their JSON before filtering by tag.
+The FakeStore support module reads `PRODUCT_ID`, `USER_ID`, `CART_ID`, `LIMIT`,
+`START_DATE` and `END_DATE` at import. Supply `tests/web` and/or `tests/db` as
+path arguments for OpenCart-only discovery without those API inputs. Listing
+establishes which tests were selected. Execute them to verify credentials,
+browser launch, services and assertions. [Listing side effects](KNOWN_ISSUES.md#rpt-03-listing-tests-replaces-reports-and-adds-skipped-allure-results) · [Tag-only discovery](KNOWN_ISSUES.md#run-01-selecting-opencart-by-tag-requires-fakestore-settings) · [Report handling](REPORTS.md)
 
 ## Select a suite and browser
 
+On the host, pass the suite and browser first. The path arguments below narrow
+collection before the tag filter. Supply separate host capture output even for
+a focused run.
+
 ```sh
-bash scripts/ci/run-tests.sh test:opencart chromium
-bash scripts/ci/run-tests.sh test:api chromium
-bash scripts/ci/run-tests.sh test:db chromium
+bash scripts/ci/run-tests.sh test:opencart chromium tests/web tests/db --output=test-results/host
+bash scripts/ci/run-tests.sh test:api chromium tests/api --output=test-results/host
+bash scripts/ci/run-tests.sh test:db chromium tests/db --output=test-results/host
 
-# Storefront specs only; excludes the DB journeys tagged @web in tests/db.
-bash scripts/ci/run-tests.sh test:web chromium tests/web
+# Only storefront specs. The DB journeys also tagged @web are outside this path.
+bash scripts/ci/run-tests.sh test:web chromium tests/web --output=test-results/host
 
-# Extra arguments are forwarded to Playwright.
-bash scripts/ci/run-tests.sh test:regression webkit --workers=1
+# Regression across areas in WebKit, forwarded to Playwright with one worker.
+bash scripts/ci/run-tests.sh test:regression webkit --output=test-results/host --workers=1
 ```
 
-The `test:*` names below are positional arguments to the shell wrapper. They are
-not npm scripts. The root manifest does not define these suite commands.
-Local Allure generator commands belong to a separate implementation change.
+The suite names below are positional arguments to both the shell runner and the
+local Docker helper. For example, `node scripts/ci/local-docker.mjs test test:api chromium`
+selects the controlled FakeStore endpoint in Docker. Use the root `allure:*`
+npm scripts to manage the reporting service. [Local reporting commands](REPORTS.md#generate-and-view-reports)
 
 | Wrapper suite | Selected title tags | Scope |
 | --- | --- | --- |
@@ -122,10 +134,9 @@ adding Playwright flags. Supported projects are `chromium`, `firefox`, and `webk
 using the Desktop Chrome, Firefox, and Safari device presets. API/DB-only tests
 still belong to these projects even when they launch no browser.
 
-There is no global `grep` in the Playwright config. A bare
-`npx --no-install playwright test` selects all tests in all three projects; this
-also repeats API requests and DB work per project. Prefer an explicit suite and
-project for a focused run.
+The Playwright config sets no global tag filter. Without a project selection,
+Playwright collects all three browser projects, including the API requests and
+DB work in each. Choose a suite and browser for a focused run.
 
 Playwright's [versioned CLI reference](https://github.com/microsoft/playwright/blob/v1.64.1/docs/src/test-cli-js.md)
 and [tag selection reference](https://github.com/microsoft/playwright/blob/v1.64.1/docs/src/test-annotations-js.md)
@@ -161,7 +172,8 @@ For storefront tests, `WEB_APP_URL` must reach the existing OpenCart installatio
 The successful JSON login row resolves those same environment credentials; tests
 do not create or repair that configured account. Product settings must match the
 installed catalog and its displayed currency/tax/quantity totals. The shopping
-journey ends at cart validation and does not submit an order.
+journey ends at cart validation. The displayed line amount and the success-row
+login mapping have documented coverage limits. [Known issues COV-02 and COV-03](KNOWN_ISSUES.md#what-a-passing-test-can-miss)
 
 Browser contexts are isolated per test, and the page fixtures close their page
 and context afterwards. This does not roll back server data. The ordinary
@@ -174,9 +186,10 @@ email and requires the exact no-match warning.
 
 DB journeys require direct access to the same MySQL database used by OpenCart,
 the expected `oc_` tables, and permissions for their queries and scoped cleanup
-deletes. Admin journeys also need working `ADMIN_USERNAME`/`ADMIN_PASSWORD` and
-customer-management access. See the [DB suite notes](../tests/db/README.md) for
-the schema assumptions and coverage.
+deletes. Their preflight executes `SELECT 1`. Confirm independently that this is the
+storefront's dedicated test database. Admin journeys also need working
+`ADMIN_USERNAME`/`ADMIN_PASSWORD` with customer-management access.
+[Target setup](DEVELOPMENT.md#reproduce-one-case-from-the-host) · [DB schema and coverage](../tests/db/README.md)
 
 `fixtures/dbFixtures.ts` and the registration spec clean up generated customers
 in `finally` blocks. `utils/customerDb.ts` uses the captured customer ID and/or
@@ -248,28 +261,28 @@ This is an explicit integration operation: it builds images, starts/waits for th
 separate `opencart-local-ci` applications, runs service checks, and executes tests
 with CI retry/worker settings. It creates/reuses private generated runtime
 configuration and separate volumes, preserves the root `.env` and existing local
-OpenCart project, and leaves the application containers running. Even passing
-`--list` to this helper still performs startup and service checks first; use the
-host discovery commands above for inventory only. See [CI and local Docker](CI.md)
-for lifecycle commands, ports, credentials, image matching, and workflow behavior.
+OpenCart project, and leaves the application containers running. Passing
+`--list` still performs startup and service checks first. To list cases while
+preserving existing reports, use the clean-checkout catalog invocation.
+[Discovery options](#discover-without-executing-tests) · [CI and local Docker](CI.md)
 
-Normal runs keep the configured list, HTML, JUnit, and Allure reporters. Host
-HTML/JUnit are written to `reports/`, Allure raw results to `allure-results/`, and
-the wrapper's raw test artifacts to `test-results/`. Local Docker outputs use
-their `local-docker/` subdirectories, with raw artifacts under
-`test-results/local-docker/run/`. CI uploads HTML/JUnit and Allure outputs after
-successful or failed test execution.
+The configured `list` reporter writes directly to the console. The artifact
+reporter filters events and renders HTML/JUnit and Allure JSON separately. Host
+HTML/JUnit are in `reports/`, Allure JSON in `allure-results/` and private
+captures in `test-results/host/` with the commands above. Docker uses
+`reports/local-docker/`, `allure-results/local-docker/` and
+`test-results/local-docker/run/`.
 
-Screenshots are captured only on failure, videos are retained only on failure,
-and traces are collected on the first retry. A default host run has no retries,
-so it produces no first-retry trace unless retries are enabled explicitly. API and
-DB-only tests have no browser video/screenshots. Overriding `--reporter` changes
-which report artifacts are generated; keep configured reporters for CI uploads.
+Browser failures can produce screenshots and video. Trace collection uses the
+first retry, so a host run with zero retries has no first-retry trace. API and
+SQL-only tests do not use a browser page. Replacing the reporter for an ordinary
+test run is rejected by the project configuration.
 
-Reports can contain submitted credentials and test data. Use dedicated test
-identities and review artifacts before sharing them. HTML/JUnit outputs and Allure
-raw results have different retention/cleanup behavior; Allure results accumulate
-between runs.
+In Actions, the readiness marker and upload privacy check must pass before
+the seven-day HTML/JUnit and Allure JSON artifacts are uploaded. The separate
+report job creates reduced HTML for Pages or an Actions preview if a completed
+test result exists. Local capture files stay separate. Console assertion diffs
+can still include returned data such as FakeStore passwords. [Visibility and retention](REPORTS.md#what-is-public) · [Console disclosure API-01](KNOWN_ISSUES.md#api-01-a-failed-user-count-assertion-prints-passwords-to-the-console)
 
 View the current HTML output with the installed Playwright CLI:
 
@@ -279,9 +292,15 @@ npx --no-install playwright show-report reports
 npx --no-install playwright show-report reports/local-docker
 ```
 
-JUnit XML can be read directly or imported into a test-results viewer. Raw Allure
-results are JSON and attachments, rather than a viewable HTML report. The local
-Allure generator, its npm commands, and persisted history are delivered separately;
-follow its [implementation guide](https://github.com/gurevmark/opencart-playwright-framework/blob/a299c994ce375dcddf3f86116a88ff2fd9f7187c/docs/REPORTS.md)
-only in a checkout containing that change. This documentation branch does not add
-the Allure service, helper, or npm scripts.
+Read JUnit XML directly or import it into a test-results viewer. To generate
+local Allure HTML after a Docker test run, run the following from the repository
+root. Use `host` instead of `local-docker` after a host-side run.
+
+```sh
+npm run allure:up
+npm run allure:generate -- local-docker
+npm run allure:open -- local-docker
+```
+
+The two projects retain separate history. Allure inputs accumulate across runs.
+[Viewing, cleanup and retention](REPORTS.md#fresh-runs-versus-accumulated-results)

@@ -1,10 +1,20 @@
 # GitHub Actions setup
 
-Automatic CI runs **all 94 Playwright scenarios** headlessly in a Playwright
-container built on an Ubuntu GitHub-hosted runner: **27 OpenCart web/database
-tests** and **67 FakeStore API tests against a controlled compatibility fork**.
-The API result describes the
-controlled service, not the public `https://fakestoreapi.com` deployment.
+## Choose a test run
+
+| Task | Where to start |
+| --- | --- |
+| Check the stack locally | Run `node scripts/ci/local-docker.mjs test test:sanity chromium` from the repository root for the nine sanity cases. Use `test:master` for all 94. [Full Docker Desktop stack](#full-docker-desktop-stack) |
+| Start a GitHub Actions run | Open **Actions → Playwright Web, API and DB Tests → Run workflow** and select the branch, suite and browser. Pushes to `main` and eligible PRs targeting `main` use `test:master` in Chromium. [CI configuration](#repository-secrets) |
+| Test an existing OpenCart installation or another API endpoint | Set host addresses and test credentials in your local configuration. Pass `--output=test-results/host` to keep Docker captures separate. [Host runs and test discovery](#existing-host-side-local-runs) |
+| Investigate an Actions failure | Open the first failed step in the `test` job to distinguish a setup error, test failure or failed artifact check. For published runs, open the Allure link on the run's **Summary**. [Report formats and access](REPORTS.md#open-a-ci-report) |
+
+The workflow has three jobs. `test` builds the stack, runs the suite and checks the diagnostic artifacts before upload. `report` builds HTML when the checked artifact contains at least one test result. `publish` deploys it to Pages for pushes to `main` and manual runs on that branch. Fork pull requests and Dependabot runs skip the job that needs repository secrets. [Workflow definition](../.github/workflows/playwright.yml)
+
+Automatic CI selects **94 Playwright scenarios** in one headless Chromium project
+on an Ubuntu GitHub-hosted runner. Of these, **27** cover OpenCart web/database
+journeys and **67** exercise the controlled FakeStore compatibility fork. Public
+FakeStore availability is a separate check against the public endpoint.
 
 The test job uses Node for configuration checks and reading the lockfile.
 It builds the test image and starts four application/database containers:
@@ -14,9 +24,10 @@ It builds the test image and starts four application/database containers:
 | OpenCart | MySQL | `http://opencart/opencart/upload/`; MySQL `database:3306` |
 | Controlled FakeStore API | MongoDB | `http://fakestore:6400`; MongoDB `fakestore-database:27017` is used only by the API |
 
-The base `docker-compose.yml` remains the existing two-service local setup.
-CI explicitly adds `docker-compose.ci.yml`. Your local `.env` continues to select
-the public FakeStore API for local API runs.
+The base `docker-compose.yml` defines the two-service OpenCart stack. CI adds
+`docker-compose.ci.yml` for controlled FakeStore. Host-side API tests read
+`API_BASE_URL` from the host environment or local `.env`. The example points
+to the public service. [Environment template](../.env.example)
 
 ## Compose files and environment labels
 
@@ -97,9 +108,9 @@ The runner's UID/GID owns bind-mounted `reports/`, `allure-results/` and
 code and dependencies baked into the tested image. Playwright writes raw test
 artifacts under `test-results/run/`, allowing it to clear that directory without
 removing a mount point or changing permissions on the application directory.
-The test process's exit code is returned to the workflow. Existing artifact
-uploads and stack cleanup still
-run after a test failure.
+The test process's exit code is returned to the workflow. After a test failure
+the workflow still attempts artifact verification and stack cleanup. Both
+diagnostic uploads require the verification step to pass.
 
 The Docker actions are pinned to stable releases setup-buildx 4.4.1 and
 build-push 7.4.0. See [Docker's cache configuration](https://docs.docker.com/build/ci/github-actions/cache/),
@@ -182,17 +193,24 @@ suite with its existing assertions, browser configuration, and reporters.
 | `test:datadriven` | `@datadriven` |
 | `verify:allure-failure` | Manual acceptance check that intentionally fails one product-limit assertion |
 
-Automatic runs use Chromium. Manual runs also offer Firefox and WebKit. Tags are
-selected on the command rather than through a global Playwright filter. Full CI
-always provisions the complete stack, including when a smaller suite is selected.
+Automatic runs use Chromium. Manual runs also offer Firefox and WebKit. The shell
+wrapper selects the suite by tag. CI provisions the full stack even for a smaller
+suite. With `CI=true`, the Playwright config selects one worker and up to two retries.
+[Suite selection](../scripts/ci/run-tests.sh) · [Playwright config](../playwright.config.ts)
 
-The reporter writes Playwright HTML/JUnit under `reports/` and Allure JSON under
-`allure-results/`. CI requires fresh output directories, tests the reporter with
-a deliberate failure and retry, then checks for the completion marker and scans
-both artifacts with the four configured OpenCart credential values. Passing
-and failing test runs can both upload the checked files for seven days.
-Traces, screenshots and other files from `test-results/` stay out of both
-artifacts. GitHub log masking applies to the job log only.
+The filtered reporter writes HTML/JUnit to `reports/` and Allure JSON to
+`allure-results/`. CI exercises the reporter with a synthetic failure and retry,
+requires fresh directories for the actual suite and checks its
+`test-results/run/report-artifacts.ready` marker. The upload check inspects the
+HTML's embedded ZIP, JUnit XML and Allure JSON for the four required OpenCart
+customer/admin values and the configured API, database and signing secrets
+listed by the verifier. Checked files from passing or failing runs are available
+as Actions artifacts for seven days. [Upload check](../scripts/ci/verify-report-privacy.py)
+
+Private captures (screenshots, traces, videos and failure context) are written
+under `test-results/run/` and excluded from upload. The separate `list` reporter
+writes to the job console. Assertion diffs there can contain response data,
+including password fields. Check logs before sharing them. [Report formats and visibility](REPORTS.md#what-is-public)
 
 Every run uses an `opencart-ci-<run>-<attempt>` Compose project with fresh volumes.
 Cleanup uses both Compose files and removes only that run's project and volumes.
@@ -235,7 +253,7 @@ still displays the original passing run.
 From the project root, run:
 
 ```sh
-node scripts/ci/local-docker.mjs
+node scripts/ci/local-docker.mjs test test:master chromium
 ```
 
 This builds the current test image using Docker's local layer cache, starts
@@ -267,13 +285,35 @@ network. Normal Docker Desktop networking is sufficient; the host-networking
 feature can remain disabled. See
 [Compose networking](https://docs.docker.com/compose/how-tos/networking/).
 
+Choose a suite from the table above and pass the browser name before any
+Playwright options. These examples all use the local Docker helper.
+
+```sh
+node scripts/ci/local-docker.mjs test test:master chromium
+node scripts/ci/local-docker.mjs test test:opencart chromium
+node scripts/ci/local-docker.mjs test test:sanity chromium
+node scripts/ci/local-docker.mjs test test:regression chromium
+node scripts/ci/local-docker.mjs test test:e2e chromium
+node scripts/ci/local-docker.mjs test test:api chromium
+node scripts/ci/local-docker.mjs test test:web chromium
+node scripts/ci/local-docker.mjs test test:db chromium
+node scripts/ci/local-docker.mjs test test:datadriven chromium
+
+# Choose another browser, list API cases, or run only the shopping spec.
+node scripts/ci/local-docker.mjs test test:sanity firefox
+node scripts/ci/local-docker.mjs test test:api chromium --list
+node scripts/ci/local-docker.mjs test test:web chromium tests/web/shopping.spec.ts
+```
+
+Even with `--list`, the helper builds the image, starts or reuses the stack,
+waits for all four services and runs their checks. Playwright then replaces
+the Docker HTML/JUnit and adds skipped entries to the Docker Allure results.
+For discovery that preserves reports, use the clean-checkout catalog command
+in [Existing host-side local runs](#existing-host-side-local-runs). [Docker helper](../scripts/ci/local-docker.mjs)
+
 ```sh
 # Start/wait for applications without running tests.
 node scripts/ci/local-docker.mjs up
-
-# Choose a suite/browser; trailing arguments are passed to Playwright.
-node scripts/ci/local-docker.mjs test test:master firefox
-node scripts/ci/local-docker.mjs test test:api chromium
 
 # Inspect or stop only this project.
 node scripts/ci/local-docker.mjs status
@@ -283,6 +323,15 @@ node scripts/ci/local-docker.mjs stop
 node scripts/ci/local-docker.mjs down
 ```
 
+The helper loads the runtime configuration even for `status`, `stop` and
+`down`. A missing file triggers credential generation. A malformed file stops
+the helper before it calls Docker. To inspect existing containers without
+initializing a file, query Docker directly.
+
+```sh
+docker ps -a --filter label=com.docker.compose.project=opencart-local-ci
+```
+
 Outputs are separated from other runs: HTML/JUnit in `reports/local-docker/`,
 Allure in `allure-results/local-docker/`, and raw artifacts in
 `test-results/local-docker/run/`. A test failure returns a nonzero exit code while
@@ -290,31 +339,60 @@ keeping the stack and reports available for investigation.
 
 ### Existing host-side local runs
 
-Local OpenCart tests continue using the existing containers and ignored `.env`.
-Local API tests continue using the public API and the existing FakeStore demo-user
-configuration in that file:
+Host-side runs require local npm dependencies. Browser-based tests also require
+the selected browser on the host. Check the existing OpenCart/MySQL addresses
+and test account before a web or database run. API tests use the configured
+FakeStore endpoint and its credentials. The following example selects the 67
+HTTP scenarios in one project without launching a browser.
 
 ```sh
-bash scripts/ci/run-tests.sh test:api chromium
+bash scripts/ci/run-tests.sh test:api chromium tests/api --output=test-results/host
 ```
 
-This selects 67 API tests without launching a browser. The local API URL, username,
-password, IDs, limit, and date range come from the local environment. The CI-only
-MongoDB and JWT settings are not required for these public API runs.
+Use the separate host capture directory on every host-side test run.
+Playwright clears its output directory before running tests. The shell wrapper
+defaults to the parent `test-results/`, which also contains the Docker captures.
+Reserve `allure-report/` for the generated local site. [Capture locations](REPORTS.md#local-reports) · [Known issues](KNOWN_ISSUES.md)
 
-For discovery or configuration checks:
+For a configuration check or a list of tests in the working copy:
 
 ```sh
 node --test scripts/ci/*.test.mjs
-bash scripts/ci/run-tests.sh test:master chromium --list
+PRODUCT_ID=1 USER_ID=1 CART_ID=1 LIMIT=3 START_DATE=2020-01-01 END_DATE=2020-03-02 \
+  bash scripts/ci/run-tests.sh test:master chromium --output=test-results/host --list
 ```
 
-The root lockfile remains committed, and the controlled service has its own
-committed npm lockfile. The existing stable action versions are checkout 7.0.1,
-setup-node 7.1.0, and upload-artifact 7.0.2. Runtime/library versions and provenance
-for the new service are listed in its README.
+`--list` skips the test bodies but the configured reporter replaces
+`reports/index.html` and `reports/results.xml`. It also adds a skipped result
+for each listed case to `allure-results/`. Save the previous HTML/JUnit if you
+need them. To list tests without writing those reports, run the CI catalog command
+in a separate checkout with dependencies installed, no `.env`, and no credential
+or reporter-override variables. The six selectors below match the fixture
+catalog. The reporter guard requires the exact Playwright arguments shown.
+
+```sh
+PRODUCT_ID=1 USER_ID=1 CART_ID=1 LIMIT=3 START_DATE=2020-01-01 END_DATE=2020-03-02 \
+  npx --no-install playwright test --list --reporter=json --project=chromium
+```
+
+The catalog is written to standard output. [Reporter guard](../scripts/ci/reporters/options.cjs)
+
+The root lockfile and the controlled service's lockfile are committed. The
+workflow uses checkout 7.0.1, setup-node 7.1.0 and upload-artifact 7.0.2.
+[Controlled service versions and provenance](../docker/fakestore/README.md#runtime-and-provenance)
 
 ## Evidence and limits
+
+These entries record earlier runs. For the status of a new change, use the
+workflow run associated with its commit.
+
+On **2026-11-05**, a fresh local Compose project built the working-tree image and
+ran the CI Docker wrapper in Chromium. All **94 passed**, with zero skipped,
+failed or errored tests in JUnit. The 4 FakeStore checks, 12 OpenCart URL checks,
+14 CI helper tests, 4 reporter regression tests and the upload privacy check
+passed. The temporary project and volumes were removed. Discovery in a clean
+copy listed 94 per browser project. This run exercised the local CI path through
+artifact verification. Hosted Actions and Pages were outside its scope.
 
 The [original hosted full-suite run](https://github.com/gurevmark/opencart-playwright-framework/actions/runs/41710064983)
 passed 27 OpenCart/database tests while all 67 public FakeStore requests were
@@ -342,7 +420,7 @@ readable HTML/JUnit/Allure outputs; an unsupported suite returned exit code 2.
 Storefront and admin responses fetched from the Mac retained their external
 localhost base URLs. The original local container IDs/start times, root `.env`
 and saved full-stack credentials were unchanged. The disposable stack was
-removed; the four local full-stack services remain running and healthy.
+removed. The four local full-stack services were healthy at the end of that run.
 
 The npm dependency layer was reused (`CACHED`) during these builds. An earlier
 isolated source-only probe also confirmed fresh test code with the npm layer

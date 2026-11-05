@@ -1,51 +1,87 @@
-# Local OpenCart containers
+# Local OpenCart environments
 
-For the separate local Allure container, report-generation commands and persisted
-history, see [local test reports](../docs/REPORTS.md).
+Run commands from the repository root. Choose the Compose project that owns the data you intend to use.
 
-The course's OpenCart 3.0.3.8 runtime remains on PHP 7.4 for compatibility. Its Debian 11 package sources now use the official Debian archive so fresh CI builds can download packages after Bullseye's retirement. Expiry checks are disabled only for the archived source metadata; package signature verification remains enabled. A PHP/OpenCart runtime upgrade is a separate change. See [Debian's archive](https://www.debian.org/distrib/archive) and [Bullseye LTS dates](https://wiki.debian.org/LTS/Bullseye).
+| Task | Compose project | Default addresses from the host |
+| --- | --- | --- |
+| Run the CI-style tests in Docker | `opencart-local-ci` runs OpenCart, MySQL, controlled FakeStore, MongoDB and a one-off Playwright container. | Storefront `http://localhost:18086/opencart/upload/`, MySQL `127.0.0.1:13316`, FakeStore `http://127.0.0.1:16406` |
+| Use an existing store or run Playwright on the host | `framework1-opencart` runs OpenCart and MySQL. Host-side API tests use the endpoint configured in `API_BASE_URL`. | Storefront `http://localhost/opencart/upload/`, MySQL `127.0.0.1:3306` |
 
-The root `docker-compose.yml` manages the existing `framework1-opencart` Compose project. Its project name preserves the existing `framework1-opencart_opencart_database` and `framework1-opencart_opencart_files` named volumes. The storefront is at http://localhost/opencart/upload/.
+MySQL and FakeStore publish their ports on the loopback interface. MongoDB is reachable inside the Compose network only. The storefront port binds to all host interfaces, even when the configured storefront URL uses `localhost`.
 
-From the project root, use `docker compose ps` to inspect the services, `docker compose stop` to stop them, and `docker compose start` to start existing containers. `docker compose up -d` can create or recreate containers; review configuration and volume names before using it. Never use `docker compose down --volumes` if the current data must be preserved.
+## Run the full stack in Docker
 
-On OpenCart startup, the entrypoint can install into an empty database, write configuration files, remove the installer, and create a test customer if absent. Review `opencart/entrypoint.sh` and its helper scripts before recreating or starting the service when these changes are not wanted.
-
-Compose reads the root `.env`. Container settings use `OPENCART_` overrides when supplied, otherwise they inherit the framework's `DB_`, `APP_`, and `ADMIN_` settings. There are no usable password defaults. MySQL is published on `127.0.0.1` at `DB_PORT` (default `3306`) so host-side tests can reach it. The database health check authenticates as the application account and executes `SELECT 1`.
-
-For a new database volume, also supply `OPENCART_DB_ROOT_PASSWORD` in your ignored local environment. MySQL requires this initialization password; it is separate from `DB_PASSWORD`. The OpenCart startup helpers require supplied database, administrator, and test-customer credentials before changing files or data. The installer email defaults to the synthetic `admin@example.test`.
-
-For host-side tests, set `DB_HOST=127.0.0.1` and configure `DB_USER`, `DB_PASSWORD`, and `DB_NAME` in `.env` for an existing MySQL account. Updating a MySQL container's environment variables does not change accounts/passwords already stored in its volume. Preserve the application's working credentials unless intentionally rotating them.
-
-GitHub Actions creates a separate four-service stack by adding `docker-compose.ci.yml`: OpenCart/MySQL plus a controlled FakeStore API/MongoDB pair. It passes credentials through process environment variables, without a `.env` file. The default local Compose command still manages only OpenCart/MySQL. See [GitHub Actions setup](../docs/CI.md) for the complete Secrets/Variables list. Do not run CI cleanup commands against this local project.
-
-CI additionally builds `playwright/Dockerfile` from the repository root and runs
-the selected tests in that image. Browser binaries come from the version-matched
-official Playwright base; npm dependencies are cached in a separate Buildx layer
-between runs. The image is loaded locally on the Ubuntu runner without registry
-publication. Test code comes from the checked-out commit, credentials arrive only
-at runtime, and reports are written to host-mounted output directories. See the
-[image and cache notes](../docs/CI.md#playwright-image-and-build-cache).
-
-For a complete local pre-push replica in Docker Desktop, run
-`node scripts/ci/local-docker.mjs` from the repository root. It explicitly adds
-`docker-compose.ci.yml` and `docker-compose.test.yml`, builds/runs the Playwright
-service alongside all four application/database containers, and uses the
-controlled API instead of the public endpoint. Its `opencart-local-ci` project,
-ports, volumes and private generated credentials are separate from the existing
-local OpenCart installation. After tests, the four application services remain
-available in Docker Desktop; use the helper's `stop` or `down` command to stop or
-remove only that project. See [full local setup](../docs/CI.md#full-docker-desktop-stack).
-
-The shared test service joins the same Compose bridge network as the applications.
-It uses `opencart:80`, `database:3306` and `fakestore:6400`, with private browser
-shared memory. Docker Desktop's host-networking option is not needed. OpenCart
-selects the configured internal base URL for internal service requests and retains
-the external localhost URL for access from the Mac. The original two-service
-runtime keeps its previous URL behavior when no internal URL is configured.
-
-After changing the port mapping, `docker compose up -d --no-deps database` recreates only the database container and retains its named volume. Wait for its health check before running the headless database journey:
+Start Docker with Compose available and use Node.js on the host. The test image supplies the test dependencies and browsers. Choose one of these commands.
 
 ```sh
-npx --no-install playwright test tests/db/customer-registration.spec.ts --grep @db --project=chromium
+node scripts/ci/local-docker.mjs test test:master chromium  # All scenarios
+node scripts/ci/local-docker.mjs test test:api chromium     # Controlled FakeStore API
+node scripts/ci/local-docker.mjs test test:sanity firefox   # Sanity tests in Firefox
 ```
+
+The helper combines three Compose files, builds the Playwright image and waits for the four application and database services. It runs the FakeStore integration checks and OpenCart URL checks before the selected tests. The command returns the test exit code. The four services stay available for diagnosis after the test container exits. [Local helper](../scripts/ci/local-docker.mjs) · [OpenCart and MySQL](../docker-compose.yml) · [FakeStore and MongoDB](../docker-compose.ci.yml) · [Playwright](../docker-compose.test.yml)
+
+Inside the Compose network, Playwright uses `http://opencart/opencart/upload/`, `database:3306` and `http://fakestore:6400`. OpenCart generates internal storefront and Admin links when the request host is `opencart` or `opencart:80`. Requests from the host browser use the configured external URL. The test container has 1 GB of private shared memory for browser processes.
+
+```sh
+node scripts/ci/local-docker.mjs up      # Start the four services without running tests
+node scripts/ci/local-docker.mjs status  # Inspect this project's containers
+node scripts/ci/local-docker.mjs stop    # Stop the services
+node scripts/ci/local-docker.mjs down    # Remove containers and network, keep named volumes
+```
+
+The helper passes its own settings to Compose with `--env-file /dev/null`. Its first invocation creates an ignored, private `.docker-local/runtime.json` containing generated credentials and published ports. Keep this file for as long as you keep the volumes. If a host port is busy, edit the relevant entry under `ports`, then run `up` again.
+
+HTML and JUnit reports go to `reports/local-docker/`, raw Allure results to `allure-results/local-docker/`, and browser captures to `test-results/local-docker/run/`. To view a Docker run in the separate Allure service, use the following commands after the tests finish. [Report formats and history](../docs/REPORTS.md)
+
+```sh
+npm run allure:up
+npm run allure:generate -- local-docker
+npm run allure:open -- local-docker
+```
+
+## Use the existing store from the host
+
+Plain `docker compose` uses the root `.env` and the `framework1-opencart` project. For a new installation, populate `.env` from the template. For an existing installation, inspect its containers, volumes and published ports first. [Environment template](../.env.example)
+
+```sh
+docker compose ps --all
+docker compose port opencart 80
+docker compose port database 3306
+docker volume ls --filter label=com.docker.compose.project=framework1-opencart
+```
+
+The `framework1-opencart_opencart_database` volume holds MySQL data. The `framework1-opencart_opencart_files` volume holds the store files. `docker compose stop` stops the containers. `docker compose start` starts existing containers with their existing images. Check the schema before starting OpenCart against an existing volume. The startup procedure below explains why. `docker compose up -d --wait` can create or recreate containers. `docker compose down --volumes` deletes the named volumes and their data.
+
+| Environment settings | What to check |
+| --- | --- |
+| `WEB_APP_URL`, `OPENCART_HTTP_SERVER`, `OPENCART_PORT` | The web test URL and OpenCart's public URL should point to the same storefront and end in `/opencart/upload/`. Include the published port in both URLs if you change it from 80. |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Host-side tests use `DB_HOST=127.0.0.1` and the published port. The store container uses `database:3306`. The MySQL health check authenticates as the application user and executes `SELECT 1`. |
+| `APP_EMAIL`, `APP_PASSWORD`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` | Supply the test customer and administrator for this store. If you set `OPENCART_DB_*`, `OPENCART_TEST_*` or `OPENCART_ADMIN_*` overrides, align the corresponding test settings with the accounts the container uses. |
+| `OPENCART_DB_ROOT_PASSWORD` | A new MySQL volume requires a separate initialization password. An existing volume uses the accounts already stored in MySQL. Rotate credentials in the database itself. |
+
+After changing only the published MySQL port, run `docker compose up -d --no-deps --wait database`, then check `docker compose port database 3306`. The following host-side Chromium test registers a customer in the test store, verifies it in Admin and MySQL, and cleans up its records. Install the host test dependencies and Chromium first. Give host runs their own `--output` directory because Playwright clears it before a run. [Database test guide](../tests/db/README.md)
+
+```sh
+npx --no-install playwright test tests/db/customer-registration.spec.ts --grep @db --project=chromium --output=test-results/host
+```
+
+## What OpenCart does at startup
+
+1. The entrypoint built from this repository requires database, administrator and test customer credentials. If the store volume lacks `upload/index.php` or the expected `react/promise` vendor file, it copies the distribution into that volume. [Entrypoint](opencart/entrypoint.sh)
+2. The database probe runs `SHOW TABLES LIKE 'oc_setting'` for the default `oc_` prefix. A match skips installation. Zero matches or a query error return exit code 10, which starts the OpenCart installer. The installer initializes the schema and creates the administrator, using `admin@example.test` as the default administrator email. [Database probe](opencart/database-state.php)
+3. Each successful start writes `upload/config.php` and `upload/admin/config.php` and looks up the test customer by case-insensitive email. It creates a missing customer. Existing customers keep their stored passwords. The entrypoint then removes `upload/install`, assigns ownership to `www-data` and starts Apache. [Configuration writer](opencart/configure.php) · [Customer seeding](opencart/seed-customer.php)
+
+**Check the schema before starting OpenCart on an existing volume.** A partial database containing `oc_customer` but no table matching `oc_setting` can trigger installation, which can drop and recreate `oc_customer`. Conversely, `ocXsetting` matches the pattern and skips installation because SQL `LIKE` treats `_` as any single character. Inspect an unfamiliar or partially restored schema before starting the store. If the existing database container is stopped, start MySQL alone with `docker compose start database`. Once it is ready, list the tables visible to the application account.
+
+```sh
+docker compose exec -T database sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql --host=127.0.0.1 --user="$MYSQL_USER" "$MYSQL_DATABASE" --execute="SHOW TABLES"'
+```
+
+For a startup failure in the two-service project, inspect `docker compose ps --all` and `docker compose logs --tail=60 database opencart`. For the full stack, use the helper's `status` command and open the affected container's log in Docker Desktop. With the default ports, `curl -fsS http://127.0.0.1:16406/health` checks the controlled API and its MongoDB connection. If a login fails after an environment change, check the selected volume and the credentials stored in that installation.
+
+## Images and CI
+
+The course uses OpenCart 3.0.3.8 with PHP 7.4. The Dockerfile uses Debian's official archive for Bullseye packages and disables the expiry check for archived metadata while retaining signature verification. [OpenCart image](opencart/Dockerfile)
+
+GitHub Actions creates a separate Compose project for each run attempt. The Playwright image uses the version resolved in the root lockfile and caches the npm dependency layer. CI loads the image into the runner's Docker engine and supplies credentials at runtime. Cleanup removes the volumes for that attempt. [Playwright image](playwright/Dockerfile) · [GitHub Actions setup](../docs/CI.md) · [Controlled FakeStore](fakestore/README.md)

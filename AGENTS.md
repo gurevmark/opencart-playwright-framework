@@ -5,6 +5,7 @@
 - Run browser tests headlessly by default. Use tags to select suites rather than a global tag filter.
 - Reuse the existing OpenCart and MySQL containers when configuring integration tests; verify their addresses and configuration before connecting.
 - Ensure CI reporter settings produce the artifacts that the workflow uploads.
+- Write all project documentation in English, including headings, tables, example comments and link text.
 
 ## Read before working
 
@@ -16,10 +17,15 @@
    [web](tests/web/README.md), [API](tests/api/README.md), or [DB](tests/db/README.md).
 4. Use the [prompt catalog](prompts/README.md) for scenario intent and generation
    conventions. Generic prompt defaults do not override these project rules.
+5. Use the [development guide](docs/DEVELOPMENT.md) to trace a change through the
+   framework and the [issue register](docs/KNOWN_ISSUES.md) for reproductions and
+   acceptance criteria. Use the [Playwright CLI skill](.agents/skills/playwright-cli/SKILL.md)
+   for interactive locator investigation when needed.
 
 ## Work and verification
 
-- Inspect `git status --short` and preserve unrelated changes. Reuse existing
+- Run `git status --short --branch` and `git worktree list` before editing. If the
+  task specifies a branch, work in the directory that has it checked out. Reuse existing
   fixtures, page objects, routes, schemas, datasets, and utilities before adding new ones.
 - Use [.env.example](.env.example) and [configuration](docs/CONFIGURATION.md) to
   understand settings. Do not print or commit `.env`, private generated credentials,
@@ -27,16 +33,22 @@
 - Establish the target before running tests. Host runs may use the public FakeStore
   API and persistent OpenCart data; the explicit full Docker helper uses its own
   controlled services. See [CI / full Docker setup](docs/CI.md).
-- `test:*` suite names are positional arguments to `scripts/ci/run-tests.sh`, not
-  npm scripts. Select a browser project explicitly. `@web` includes some MySQL-backed
-  journeys; `tests/db/db-client.spec.ts` is also a live integration test.
+- Pass `test:*` suite names to `scripts/ci/local-docker.mjs test` in Docker or
+  `scripts/ci/run-tests.sh` on the host. Select a browser explicitly. Of the 26
+  `@web` cases, 14 also require MySQL. The standalone `tests/db/db-client.spec.ts`
+  exercises a real MySQL connection.
 - For discovery and offline helper checks, use:
 
   ```sh
-  bash scripts/ci/run-tests.sh test:master chromium --list --reporter=list
+  bash scripts/ci/run-tests.sh test:web chromium tests/web --output=test-results/host --list
   node --test scripts/ci/*.test.mjs
   ```
 
+- A normal host run clears its capture directory. Use `--output=test-results/host`
+  to preserve Docker captures. Ordinary `--list` replaces host HTML/JUnit and
+  adds skipped cases to Allure. Follow [CI](docs/CI.md#existing-host-side-local-runs)
+  for a catalog that preserves reports. Keep private captures and credential-bearing
+  assertion payloads out of logs and shared artifacts.
 - Discovery does not prove tests pass. Follow [testing](docs/TESTING.md) for live
   prerequisites and the current standalone TypeScript compiler limitation. Report
   which commands ran, against which service/browser, and any verification limits.
@@ -46,3 +58,15 @@
 - Plans under `docs/superpowers/plans/` and dated verification sections are
   historical records. Check the current source and environment instead of treating
   old checkboxes or pass counts as current state.
+
+## Secret checks before commits
+
+- Use the local `check-secrets` skill before committing. After the final
+  `git add`, run `python3 /Users/mark/.codex/skills/check-secrets/scripts/secrets_check.py`
+  from the current worktree. Only exit code 0 permits an otherwise authorized commit.
+- For exit code 1, resolve the finding and stage the fix. For exit code 2, resolve the
+  incomplete scan. Run the check again after either result.
+- Preserve other contributors' staged changes. Keep secret values out of logs and keep
+  the pre-commit hook enabled. This workstation installs it in the shared Git directory,
+  so it covers linked worktrees. For a new clone, check existing hooks and
+  `core.hooksPath` before installation.

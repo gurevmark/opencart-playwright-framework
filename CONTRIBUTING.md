@@ -10,7 +10,8 @@ guide. Inspect existing fixtures, utilities, routes, schemas, and datasets befor
 adding equivalents. Scenario requirements and generation templates are cataloged
 in [prompts/README.md](prompts/README.md).
 
-Check `git status --short` and preserve unrelated work. Establish the configured
+Check `git status --short --branch` and `git worktree list` before editing. Use the
+worktree for the requested branch and preserve unrelated changes. Establish the configured
 target and its prerequisites before running integration tests. Use
 [.env.example](.env.example) to learn variable names; keep credentials in ignored
 local configuration or CI Secrets. Never include secret values in documentation,
@@ -42,12 +43,14 @@ applications or start browsers:
 
 ```sh
 node --test scripts/ci/*.test.mjs
-bash scripts/ci/run-tests.sh test:master chromium --list --reporter=list
+bash scripts/ci/run-tests.sh test:web chromium tests/web --output=test-results/host --list
 git diff --check
 ```
 
-The reporter override above is for discovery, which produces no run artifacts.
-Actual CI runs must retain the reporters expected by artifact uploads. Follow
+The discovery example imports only the storefront specs. It still replaces the
+host HTML/JUnit reports and records skipped cases in Allure. For discovery that
+preserves existing reports, use the [clean catalog command](docs/CI.md#existing-host-side-local-runs).
+Keep the configured reporters for CI uploads. Follow
 [testing](docs/TESTING.md) for the targeted integration command and compiler
 availability: TypeScript is used by Playwright but the project does not currently
 declare a standalone `typescript` dependency. Do not mistake collection or
@@ -78,7 +81,8 @@ The OpenCart/PHP compatibility exception is documented in the
 
 ## Documentation updates
 
-Each topic has one guide. Update it alongside source changes and link it from the
+Write project documentation in English, including headings, examples, captions and
+link labels. Update the topic's guide alongside source changes and link it from the
 [index](docs/README.md); use links elsewhere instead of maintaining parallel copies.
 
 | Change | Review / update |
@@ -88,11 +92,12 @@ Each topic has one guide. Update it alongside source changes and link it from th
 | Test scenario, tag, suite selector, or execution setting | [Testing](docs/TESTING.md), affected suite README, relevant [scenario prompt](prompts/README.md) if requirements changed |
 | Container lifecycle, initialization, test image, or CI workflow | [Local Docker](docker/README.md), [CI](docs/CI.md), [configuration](docs/CONFIGURATION.md) |
 | Controlled API behavior, data, or dependencies | [Controlled service guide](docker/fakestore/README.md), [API suite](tests/api/README.md) |
-| Reporter, output directory, Allure command, or uploaded artifact | [Reporting](docs/TESTING.md#docker-ci-and-reports), [CI](docs/CI.md), and the generator guide when changing its separate implementation |
-| Onboarding command or contributor / agent workflow | [Root README](README.md), this file, [AGENTS.md](AGENTS.md) |
+| Reporter, output directory, Allure command, or uploaded artifact | [Reporting](docs/REPORTS.md), [CI](docs/CI.md) and [Testing](docs/TESTING.md#docker-ci-and-reports) |
+| Onboarding command or contributor / agent workflow | [Root README](README.md), [Development](docs/DEVELOPMENT.md), this file and [AGENTS.md](AGENTS.md) |
+| Reproduced defect or coverage limit | [Known issues](docs/KNOWN_ISSUES.md), affected suite guide and the owning code |
 | Added, moved, or removed documentation | [Documentation index](docs/README.md) and inbound links |
 
 Keep plans as dated records. Label old verification evidence as historical and
 record new results separately with the target, command, browser, and date. A
-successful controlled API run does not verify the public API. Avoid undated health
-claims and fixed scenario counts in onboarding; use discovery for the current set.
+controlled API run verifies that service and its fixtures. Date any scenario counts
+in onboarding and link to a discovery command for the current selection.

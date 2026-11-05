@@ -2,23 +2,22 @@
 
 [Documentation index](README.md)
 
-Use this document to identify which configuration a command consumes. The
-tracked [`.env.example`](../.env.example) lists host-side starting settings;
-it is not a loaded configuration file. Keep working values in an ignored `.env`
-or the invoking process environment. No credentials belong in documentation.
+Choose configuration according to where the tests run. For host runs, the
+tracked template lists starting settings. Keep working values in the ignored
+root `.env` or the invoking process environment. [Environment template](../.env.example)
 
-For commands, use the [testing guide](TESTING.md), [local OpenCart container
-guide](../docker/README.md), [CI guide](CI.md), and [reporting guide](TESTING.md#docker-ci-and-reports).
-The sources linked below define the behavior if those guides drift.
+For setup and commands, see [Development](DEVELOPMENT.md), [Testing](TESTING.md),
+[OpenCart containers](../docker/README.md), [CI](CI.md) and [Reporting](REPORTS.md).
 
 ## Configuration ownership and precedence
 
 | Execution path | Configuration source and precedence | Scope |
 | --- | --- | --- |
-| Host Playwright | Exported process variables take precedence over root `.env`. [`playwright.config.ts`](../playwright.config.ts) loads `.env` by an absolute path with dotenv's default non-overriding behavior. Some helpers/specs also load dotenv without overriding. | Existing services selected by `WEB_APP_URL`, `API_BASE_URL`, and `DB_*`; no application startup in Playwright config. |
+| Host Playwright | Exported process variables take precedence over root `.env`. The configuration calls the [reporter guard](../scripts/ci/reporters/options.cjs), which loads the root `.env` for ordinary runs. Some helpers and specs also load dotenv with the default non-overriding behavior. | Existing services selected by `WEB_APP_URL`, `API_BASE_URL`, and `DB_*`; no application startup in Playwright config. |
 | Base local Compose | The shell environment takes precedence over root `.env` for Compose interpolation; YAML fallback expressions apply when values are unset or empty. | [`docker-compose.yml`](../docker-compose.yml), project `framework1-opencart`, OpenCart/MySQL and their persistent volumes. |
 | Explicit local Docker replica | [`local-docker.mjs`](../scripts/ci/local-docker.mjs) merges inherited process variables with generated settings, with generated settings winning for every key it supplies. It passes `--env-file` with the OS null device, disabling root `.env` import. | Project `opencart-local-ci`; combines the base, application overlay, and test-service Compose files. |
 | GitHub Actions | [Workflow](../.github/workflows/playwright.yml) `env` maps repository Variables/Secrets and fixed values. CI does not create `.env`; the test image excludes it. The Docker test wrapper also uses `--env-file /dev/null`. | A unique `opencart-ci-<run>-<attempt>` project with disposable application volumes. |
+| Local Allure service | The [reporting helper](../scripts/allure.mjs) passes a null env file and a separate Compose file with fixed ports and history settings. | Project `opencart-allure` serves the existing `host` and `local-docker` report directories. |
 
 `APP_ENV` is a label: it does not select a separate file, URL, or database. The
 test-service Compose file defaults it to `qa` when unset or empty; the local
@@ -60,9 +59,13 @@ working dedicated test identities for the selected target.
 
 The commented `BASIC_AUTH_*`, `API_KEY`, `ACCESS_TOKEN`, `CLIENT_ID`,
 `CLIENT_SECRET`, `AUTHORIZATION_CODE`, and `TOKEN_URL` entries in `.env.example`
-are placeholders. Current suites do not consume them. `TEST_ENV` and
-`TEST_AUTHOR` occur only in the optional [custom reporter](../utils/CustomReporter.ts),
-which is commented out in Playwright config; they do not replace `APP_ENV`.
+are placeholders. The active reporters are `list` and `scripts/ci/reporters/artifacts.cjs`.
+The older reporter in `utils/CustomReporter.ts` reads `TEST_ENV` and `TEST_AUTHOR`;
+the project does not register it. [Active reporter configuration](../playwright.config.ts)
+
+FakeStore reads its three IDs, limit and date bounds while collecting tests,
+including during a tag-only OpenCart selection. A path such as `tests/web` or
+`tests/db` limits collection before the tag filter. [Discovery issue RUN-01](KNOWN_ISSUES.md#run-01-selecting-opencart-by-tag-requires-fakestore-settings) · [Host examples](TESTING.md#discover-without-executing-tests)
 
 ## Application and Compose inputs
 
@@ -124,13 +127,12 @@ target.
 | MySQL | `127.0.0.1:3306` by default; use the verified published `DB_PORT` | `127.0.0.1:13316` | `database:3306` |
 | Controlled FakeStore | Not started by base Compose; host API tests normally target the public API | `http://127.0.0.1:16406` | `http://fakestore:6400` |
 | MongoDB | Not started by base Compose | Not published | `fakestore-database:27017`, used by the API |
-| [Separate Allure change](#separate-local-allure-generator) | When installed: `http://127.0.0.1:5051/allure-docker-service` | Same separate service | Listens on `5050` in its own project; not included in this documentation branch |
+| [Local Allure service](#separate-local-allure-generator) | `http://127.0.0.1:5051/allure-docker-service` after `npm run allure:up` | Same separate reporting service | Listens on container port `5050` in project `opencart-allure` |
 
 Service DNS names work inside the corresponding Compose network. `localhost`
 inside the test container refers to that container. Changing a published host
-port does not change internal service ports. The base MySQL, overlay FakeStore,
-and Allure mappings bind to loopback; the OpenCart mapping has no explicit host-IP
-restriction. CI sets OpenCart's published host port to `8080` and retains the
+port does not change internal service ports. Base MySQL, overlay FakeStore and Allure publish to loopback. OpenCart's
+mapping leaves the host IP unspecified. CI sets OpenCart's published host port to `8080` and retains the
 same internal addresses shown above. See [Compose topology](CI.md#compose-files-and-environment-labels).
 
 ## Isolated test-run settings
@@ -158,8 +160,8 @@ credentials and three configurable published ports in ignored
 Retain this private file with that project's volumes; startup expects the same
 credentials. Its output mounts use `reports/local-docker/`,
 `allure-results/local-docker/`, and `test-results/local-docker/`. It overrides
-inherited values for its generated keys, so shell exports are not a way to
-replace its stored passwords or ports.
+inherited values for its generated keys. Even lifecycle commands such as `status`
+load the file and can initialize credentials when it is missing. [Inspecting this stack](CI.md#full-docker-desktop-stack)
 
 [`env_setup.sh`](../env_setup.sh) explicitly installs dependencies at `latest`
 and can install local browsers with `--with-browsers`; it changes package
@@ -170,28 +172,33 @@ committed lockfile and keep the Playwright image version aligned; see
 
 ## Initialization, secrets, and readiness
 
-Starting OpenCart can change persistent files/data. Its
-[entrypoint](../docker/opencart/entrypoint.sh) validates required credentials,
-detects installation state, installs when the prefixed settings table is absent,
-regenerates storefront/admin configuration on every start, and
-[creates the configured customer only when absent](../docker/opencart/seed-customer.php).
-It does not update that customer's existing password. MySQL initialization
-variables likewise do not rotate accounts stored in an existing volume.
-Changing `.env` alone is not a credential-rotation procedure.
+Confirm the target volume and database before starting OpenCart on existing
+data. The entrypoint uses a `SHOW TABLES LIKE` test for the prefixed settings
+table. A missing match or failed query sends execution to the installer, even
+if other customer tables exist. With the default prefix, the underscore in
+`oc_setting` is a SQL pattern wildcard. Issue OC-01 documents both failure modes.
+[State check](../docker/opencart/database-state.php) · [Entrypoint](../docker/opencart/entrypoint.sh) · [Startup issue OC-01](KNOWN_ISSUES.md#oc-01-a-partial-database-can-trigger-opencart-reinstallation)
+
+After an accepted installation state or a successful install, the entrypoint
+regenerates the storefront/admin configuration and creates the configured
+customer if the email is absent. An existing customer keeps its stored password.
+MySQL initialization variables apply when the volume is first initialized.
+[Customer seeder](../docker/opencart/seed-customer.php)
 
 The controlled API [bootstrap](../docker/fakestore/seed.mjs) accepts its known
 fixture version only when the configured login still matches. It refuses unknown
 populated fixture collections or changed login credentials instead of resetting
-data. MongoDB account initialization runs only for a new volume. Its simulated
-API writes and fixture scope are documented in the
-[controlled API guide](../docker/fakestore/README.md).
+data. If an insert fails before the dataset marker is written, the next start
+can reject the project's own partial fixture as unrecognized. MongoDB account
+initialization runs only for a new volume. [Controlled API guide](../docker/fakestore/README.md) · [Seeding issue API-03](KNOWN_ISSUES.md#api-03-an-interrupted-first-mongodb-seed-blocks-the-next-startup)
 
 Store local secrets in ignored configuration and CI values in repository Secrets.
 The complete GitHub Secrets/Variables mapping belongs in
 [CI configuration](CI.md#repository-secrets). The image build contexts exclude
-`.env`; passwords/signing keys are runtime inputs, not build arguments. Reports,
-traces, screenshots, and API responses can contain submitted identities or
-credentials, so keep test accounts disposable and control access to outputs.
+`.env`. Passwords and signing keys enter at runtime. Private captures and
+console assertion diffs can contain submitted values. The downloadable
+diagnostic reports are filtered, then checked before CI uploads them.
+[Diagnostic and public report contents](REPORTS.md#what-is-public)
 
 Readiness comes from the declared health checks: MySQL authenticates as the
 application account and executes `SELECT 1`; OpenCart fetches its storefront;
@@ -205,31 +212,36 @@ network connectivity.
 
 ## Reports and Allure configuration
 
-[Playwright config](../playwright.config.ts) enables list, HTML (`reports/`),
-JUnit (`reports/results.xml`), and Allure (`allure-results/`) reporters. Reporter
-paths inside the test image stay fixed; the `PLAYWRIGHT_*_DIR` settings above
-select host bind-mount destinations. CI uploads `reports/` and `allure-results/`
-after test success/failure with seven-day retention. `test-results/` is produced
-but is not a separate workflow upload.
+Playwright registers the console `list` reporter and the project's artifact
+reporter. The latter constructs HTML/JUnit and Allure JSON from filtered test
+events. In the container, `reports/`, `allure-results/` and `test-results/`
+are fixed mount points. The three `PLAYWRIGHT_*_DIR` inputs above select the
+corresponding host directories. [Playwright config](../playwright.config.ts) · [Artifact reporter](../scripts/ci/reporters/artifacts.cjs)
+
+Use `--output=test-results/host` for host-side runs. The wrapper's default
+`test-results/` includes the Docker capture subtree. Also keep captures out
+of `allure-report/`, which the local Allure service exposes. Ordinary listing
+can replace HTML/JUnit and add skipped Allure results. The project rejects
+reporter overrides for normal runs. [Capture and report issues](KNOWN_ISSUES.md#data-loss-and-disclosure) · [Catalog command](CI.md#existing-host-side-local-runs)
+
+CI checks fresh output directories, the reporter's completion marker, file
+structure and configured secrets before uploading `playwright-report` and
+`allure-results` for seven days. `test-results/run/` holds private captures.
+Separate HTML artifacts (`allure-html-*` or `allure-preview-*`) are retained
+for 30 days. Pages publication is restricted to eligible `main` runs.
+[Artifact access and retention](REPORTS.md#open-a-ci-report)
 
 ### Separate local Allure generator
 
-The generator is delivered independently of this documentation branch. The
-following settings describe that separate implementation, rather than a service
-provided by the current branch. Use its
-[implementation guide](https://github.com/gurevmark/opencart-playwright-framework/blob/a299c994ce375dcddf3f86116a88ff2fd9f7187c/docs/REPORTS.md)
-when working in a checkout containing it.
+The repository includes the `opencart-allure` project and six `allure:*` npm
+commands. Its Compose file fixes the loopback host port at `5051`, disables
+automatic generation (`CHECK_RESULTS_EVERY_SECONDS=NONE`) and keeps history
+(`KEEP_HISTORY=1`, `KEEP_HISTORY_LATEST=20`). The helper selects `host` by
+default and accepts `local-docker` for Docker runs. These settings come from
+the Compose file and helper. [Compose settings](../docker-compose.allure.yml) · [Reporting helper](../scripts/allure.mjs)
 
-There are no root `ALLURE_*` environment inputs in that service.
-Its [Allure Compose file](https://github.com/gurevmark/opencart-playwright-framework/blob/a299c994ce375dcddf3f86116a88ff2fd9f7187c/docker-compose.allure.yml) fixes host port `5051`,
-disables automatic generation (`CHECK_RESULTS_EVERY_SECONDS=NONE`), enables
-history (`KEEP_HISTORY=1`), and retains 20 numbered reports
-(`KEEP_HISTORY_LATEST=20`). Its helper defaults to project `host`, with
-`local-docker` as the second explicit report source. Generated reports/history
-are persisted under `allure-report/<source>/`; raw results remain under
-`allure-results/` and `allure-results/local-docker/`.
-
-Allure's health check fetches `/allure-docker-service/version`; it establishes
-service readiness, not the presence of a generated test report. Generation is
-explicit after tests finish and does not clear accumulated raw results. Use the
-[report guide](https://github.com/gurevmark/opencart-playwright-framework/blob/a299c994ce375dcddf3f86116a88ff2fd9f7187c/docs/REPORTS.md) for lifecycle, viewing, and source-specific cleanup.
+Generated history and HTML live under `allure-report/<source>/`. Filtered JSON
+for host runs is in `allure-results/`; Docker uses `allure-results/local-docker/`.
+The health check fetches `/allure-docker-service/version`. After a test run,
+generate the selected project's HTML explicitly. The generator verifies input
+file hashes and stored history, and retains the existing raw inputs. [Lifecycle, viewing and cleanup](REPORTS.md)

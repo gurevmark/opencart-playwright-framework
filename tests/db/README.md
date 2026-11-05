@@ -1,137 +1,74 @@
 # OpenCart database integration tests
 
-These tests verify OpenCart changes against real MySQL. Most also drive the
-storefront or Admin through Playwright page objects. They create and remove
-generated test customers; use the intended test database and verify its address
-before running. See the [documentation index](../../docs/README.md),
-[configuration](../../docs/CONFIGURATION.md), [testing](../../docs/TESTING.md)
-and [Docker setup](../../docker/README.md).
+This directory contains **15 tests per Playwright project**. Fourteen drive the storefront or Admin in a browser and verify the result in MySQL. The remaining test checks the SQL client's connection handling. Run the full group on a test store where creating, editing and removing customers is permitted.
 
-## Coverage
+[Project overview](../../README.md) · [Development guide](../../docs/DEVELOPMENT.md) · [Known issues](../../docs/KNOWN_ISSUES.md)
 
-| Spec | Behavior checked |
-| --- | --- |
-| [`customer-registration.spec.ts`](customer-registration.spec.ts) | Register through the storefront, find exactly that email in Admin, compare saved identity/status in MySQL and check a valid creation timestamp. |
-| [`customer-lifecycle.spec.ts`](customer-lifecycle.spec.ts) | Profile updates preserve customer ID/creation date; Admin disable/enable changes SQL status and fresh login behavior; password changes replace the stored value and login credentials; Admin deletion removes the customer and the defined related records. |
-| [`customer-validation.spec.ts`](customer-validation.spec.ts) | Duplicate registration with original/uppercase email preserves the existing row; missing required fields, mismatched passwords and missing privacy consent show the expected validation error without inserting a customer. |
-| [`db-client.spec.ts`](db-client.spec.ts) | A deliberately rejected statement identifies its connection; that exact connection disappears from `information_schema.PROCESSLIST`, and a later parameterized query succeeds. No business data or browser is used. |
+## Run the suite
 
-All specs carry `@master`, `@regression` and `@db`. UI/DB scenarios also carry
-`@web` and `@end-to-end`; validation cases also carry `@datadriven`. As a result,
-selecting `@web` or `@end-to-end` across the repository includes live SQL checks.
-
-## Prerequisites and guards
-
-- Reachable OpenCart and the same MySQL database it uses, with the `oc_` customer
-  tables expected by [`customerDb.ts`](../../utils/customerDb.ts). The table
-  prefix in these SQL helpers is fixed; changing Compose's schema alone does not
-  change the queries.
-- `WEB_APP_URL` for browser scenarios. Admin navigation resolves
-  `admin/index.php` relative to this storefront URL, so retain its directory and
-  trailing slash. Admin scenarios additionally need `ADMIN_USERNAME` and
-  `ADMIN_PASSWORD` with customer view/edit/delete permissions.
-- `DB_HOST`, `DB_USER`, `DB_PASSWORD` and `DB_NAME` for direct SQL access.
-  The test account needs `SELECT` and `DELETE` privileges on the listed tables;
-  test code scopes deletions to owned customer IDs/emails.
-  `DB_PORT` is optional in the connection helper; omitting it leaves the driver
-  default. Set it explicitly when connecting through a published host port.
-  Host-side tests use the verified host address/mapped port; containerized tests
-  use `database:3306` through the Compose network.
-- The connection-error spec expects MySQL's `GTID_SUBSET`, the
-  `ER_MALFORMED_GTID_SET_SPECIFICATION` error and visibility of the test user's
-  own sessions in `information_schema.PROCESSLIST`. It is not a portable test for
-  every MySQL-compatible server.
-- Browser scenarios need the selected Playwright browser/runtime. Use existing
-  OpenCart/MySQL containers for host-side work; check their actual configuration
-  before connecting. [CI/local Docker guidance](../../docs/CI.md) describes the
-  explicit isolated container-runner path.
-
-`customerData` and the standalone registration scenario execute `SELECT 1`
-before creating an account. Missing configuration, denied permissions or an
-unavailable database fail the run; there is no automatic skip or `DB_ENABLED`
-switch. The tests do not install/migrate OpenCart or provision Admin credentials.
-
-Direct SQL access is unnecessary for the API suite and the specs under
-`tests/web/`; OpenCart itself still needs its application database. `mysql2` is a
-declared project dependency, not an optional driver or a mocked connection.
-
-## Fixture ownership and cleanup
-
-[`dbFixtures.ts`](../../fixtures/dbFixtures.ts) extends the page fixtures:
-
-1. `customerData` preflights SQL, then generates unique registration details.
-   Its `finally` removes rows for that generated email and checks it is absent.
-2. `registeredCustomer` depends on those details, registers through the frontend
-   and requires exactly one matching SQL row. The yielded record is the original
-   snapshot for later assertions.
-3. Its `finally` cleans by the captured customer ID and verifies that ID is gone.
-   Keeping the ID allows cleanup after a profile changes the email or Admin
-   removes the parent customer.
-
-[`cleanupCustomer()`](../../utils/customerDb.ts) removes customer-ID rows from
-`oc_customer_activity`, `oc_customer_ip`, `oc_customer_online`,
-`oc_customer_approval`, `oc_customer_history`, `oc_customer_reward`,
-`oc_customer_transaction`, `oc_customer_affiliate` and `oc_address`, then deletes
-`oc_customer`. It also removes `oc_customer_login` rows for the owned email(s).
-This is scoped teardown for generated customers, not a general database reset.
-
-The standalone registration spec implements its own `try/finally` using the same
-cleanup helper. The missing-email validation case uses a unique generated name
-marker plus surname/telephone to find and clean an accidentally saved row; it
-does not query or delete all customers with a blank email. The suite does not
-edit the reusable `APP_EMAIL`/`APP_PASSWORD` customer used by ordinary login specs.
-
-[`executeQuery()`](../../utils/dbClient.ts) creates a connection per statement
-and closes it in `finally`, including after rejected SQL. There is no connection
-pool, transaction rollback or cross-query transaction. Teardown can fail if the
-database becomes unavailable, and a terminated process cannot guarantee cleanup.
-
-## Running
-
-From the repository root, after verifying the intended test environment:
+From the repository root, use the separate `opencart-local-ci` Docker stack for a reproducible run.
 
 ```sh
-# Discover this suite without opening a browser or running SQL.
-bash scripts/ci/run-tests.sh test:db chromium tests/db --list
+# All 15 DB scenarios in Chromium.
+node scripts/ci/local-docker.mjs test test:db chromium
 
-# Run the complete DB suite in one browser project, headlessly.
-bash scripts/ci/run-tests.sh test:db chromium tests/db
-
-# Run only the real-MySQL connection check; no browser is launched.
-bash scripts/ci/run-tests.sh test:db chromium tests/db/db-client.spec.ts
+# Just the four customer lifecycle scenarios in WebKit.
+node scripts/ci/local-docker.mjs test test:db webkit tests/db/customer-lifecycle.spec.ts
 ```
 
-The shell wrapper selects the `@db` tag and preserves configured reporters;
-`test:db` is its suite argument, not an npm script. The explicit path confines
-discovery to DB specs. Replace `chromium` with `firefox` or `webkit` for another
-configured project. An unfiltered direct Playwright run uses every configured
-project, repeating even the connection-only test.
+The helper accepts a suite, a browser (`chromium`, `firefox` or `webkit`), then any paths or Playwright options. It builds the test runner, starts OpenCart, MySQL, FakeStore and MongoDB, and checks FakeStore and the OpenCart URL helper before running Playwright. Even a Docker command with `--list` performs that preparation. [Docker setup](../../docker/README.md) · [CI guide](../../docs/CI.md)
 
-These are integration tests, including `db-client.spec.ts`. Repository script
-unit checks such as `node --test scripts/ci/*.test.mjs` validate configuration and
-orchestration helpers; they do not establish MySQL connectivity or OpenCart
-customer behavior. The controlled FakeStore/MongoDB service checks are separate
-from this suite.
+For local discovery, install the project dependencies with `npm ci`. For execution against existing services, first check the target below and install the chosen browser for the UI scenarios.
 
-## Limits and troubleshooting
+```sh
+# List DB tests on the host without opening a browser or connecting to MySQL.
+bash scripts/ci/run-tests.sh test:db chromium tests/db --list --output=test-results/host
 
-- UI text, immediate registration enablement, duplicate-email handling and
-  related-table expectations target the installed OpenCart behavior. Check the
-  actual version/schema/configuration when those contracts change.
-- Admin deletion proves a child IP row exists before deleting. Other related
-  tables are checked for absence but are not all seeded with child records.
-  OpenCart's deletion does not remove `oc_customer_online` in this scenario;
-  fixture teardown removes that test-owned state.
-- The password scenario checks that storage changed and differs from plaintext,
-  then checks old/new login behavior. It does not assert a particular hash
-  algorithm.
-- Connection failures should be resolved against the selected host/container
-  address and SQL permissions. The preflight does not verify the full schema or
-  all delete permissions; these are exercised later in the run.
-- Assertions can fail before cleanup, and cleanup failures can be reported as
-  additional errors. Inspect both the scenario step and teardown in the report.
-  Use [report guidance](../../docs/TESTING.md#docker-ci-and-reports) for artifact locations and handling.
+# Run only the SQL client check against an already running test MySQL.
+bash scripts/ci/run-tests.sh test:db chromium tests/db/db-client.spec.ts --output=test-results/host
 
-This page describes implemented coverage and prerequisites. It does not record
-a fresh successful integration run; runtime evidence must come from the run
-being reviewed.
+# Run the complete DB suite through the existing test storefront, Admin and MySQL.
+bash scripts/ci/run-tests.sh test:db chromium tests/db --output=test-results/host
+```
+
+An explicit path confines collection to DB specs. The dedicated host `--output` keeps Playwright's cleanup away from earlier Docker captures. A plain `--list` skips test bodies and fixtures, but the project's reporters still replace host HTML and JUnit and add skipped cases to Allure. Use a separate checkout if earlier reports must be preserved. [Report locations](../../docs/REPORTS.md) · [Known report issues](../../docs/KNOWN_ISSUES.md)
+
+## Check the target
+
+| Requirement | Where it matters |
+| --- | --- |
+| `WEB_APP_URL` points at the intended storefront directory and ends in `/`. | The `homePage` fixture opens this address. Admin navigation resolves `admin/index.php` relative to it. The test image uses OpenCart 3.0.3.8 with English forms and immediate activation after registration. |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` connect to **the database used by that storefront**. | The helpers use fixed `oc_*` table names. Set the published port explicitly for host runs if it differs from the driver's default. The initial `SELECT 1` confirms connectivity. Schema and cleanup permissions are exercised by later queries. |
+| The MySQL account can `SELECT` from the checked tables and `DELETE` from the cleanup tables. | The project uses MySQL 8.0. The SQL-only case expects `GTID_SUBSET`, `CONNECTION_ID()`, error code `ER_MALFORMED_GTID_SET_SPECIFICATION` and visibility of the account's own sessions in `information_schema.PROCESSLIST`. |
+| `ADMIN_USERNAME` and `ADMIN_PASSWORD` belong to a test administrator allowed to view, edit and delete customers. | Admin is used for registration verification, disabling and enabling a customer, and customer deletion. |
+
+The runner inside Compose opens `http://opencart/opencart/upload/` and connects to `database:3306`. On the host, check the existing base project with `docker compose ps`, `docker compose port opencart 80` and `docker compose port database 3306`. Use the actual published port on `127.0.0.1` for MySQL. Match any `OPENCART_DB_*` and `OPENCART_ADMIN_*` overrides to the test settings. Container startup uses the configured shared customer's `APP_EMAIL` and `APP_PASSWORD`. DB scenarios create their own customers. [Environment template](../../.env.example) · [Test-service network](../../docker-compose.test.yml) · [Configuration guide](../../docs/CONFIGURATION.md)
+
+An unavailable database or rejected query fails the test. There is no optional DB switch. The host must already have the test schema and the administrator account. The API suite and the storefront-only files in `tests/web/` run without a direct SQL connection from the test code. A passing run of `node --test scripts/ci/*.test.mjs` exercises the framework's script helpers. Use a DB integration run to verify the actual connection and customer behavior.
+
+## What the 15 tests check
+
+| Spec | Cases | Expected behavior |
+| --- | ---: | --- |
+| [customer-registration.spec.ts](customer-registration.spec.ts) | 1 | The storefront confirms registration. Admin finds exactly one customer by email and shows Enabled. MySQL contains the expected first and last name, email, `status = 1` and a valid creation timestamp. |
+| [customer-validation.spec.ts](customer-validation.spec.ts) | 9 | Two duplicate attempts use the original email and its uppercase variant. The test checks the warning and compares the captured customer fields. Seven more cases omit first name, last name, email, telephone, password or privacy consent, or submit mismatched passwords. Each expects its specific error and zero inserted rows. |
+| [customer-lifecycle.spec.ts](customer-lifecycle.spec.ts) | 4 | A profile update replaces the email while preserving ID, creation date and status. Disabling and enabling in Admin changes SQL status and fresh login behavior. A password change replaces the stored value, rejects the old password and accepts the new one. Admin deletion removes the parent and checks related rows by ID. |
+| [db-client.spec.ts](db-client.spec.ts) | 1 | A deliberately malformed read-only `SELECT` returns an error containing its connection ID. The test waits for that exact ID to disappear from the process list and then executes `SELECT ? AS value` with `42`. |
+
+All 15 have `@master`, `@regression` and `@db`. The 14 UI scenarios also carry `@web` and `@end-to-end`. All nine validation cases carry `@datadriven`. The `@sanity` selection covers other directories. Running the direct Playwright CLI without `--project` collects this suite for all three projects, even the SQL-only case. [Playwright configuration](../../playwright.config.ts) · [Course DB requirements](../../prompts/db_test_prompt.md)
+
+## Fixtures and cleanup
+
+- [`customerData`](../../fixtures/dbFixtures.ts) runs `SELECT 1`, then generates registration fields with an address of the form `pw-<UUID>@<domain>`. Faker chooses the domain and can use public mail domains. The fixture fits rejected registrations. Its `finally` cleans up using the original email and checks that no matching row remains. [Customer generator](../../utils/dataGenerator.ts)
+- [`registeredCustomer`](../../fixtures/dbFixtures.ts) depends on `customerData`, registers through the [storefront form](../../pages/RegisterPage.ts), leaves the customer signed in, and yields a snapshot of exactly one MySQL row. In its `finally` it cleans up using the captured `customer_id` and checks it is gone. That ID survives email changes and lets the fixture find child rows after an Admin deletion. The outer `customerData` teardown then runs.
+- The standalone registration case uses page fixtures, preflights SQL, and calls `cleanupCustomer` in its own `finally`. For the missing-email case, the validation spec uses part of its UUID-based address in the first name and locates a persisted attempt by that marker, surname and telephone. It cleans up only the matched IDs.
+- [`cleanupCustomer`](../../utils/customerDb.ts) deletes owned rows by ID from `oc_customer_activity`, `oc_customer_ip`, `oc_customer_online`, `oc_customer_approval`, `oc_customer_history`, `oc_customer_reward`, `oc_customer_transaction`, `oc_customer_affiliate`, `oc_address` and `oc_customer`. It uses email for `oc_customer_login`. When an ID is known, both the supplied address and the current address read from the row are considered.
+- [`executeQuery`](../../utils/dbClient.ts) opens a separate `mysql2` connection for each statement and closes it in `finally`, including after SQL errors. The deletes span multiple connections and can finish only partially if execution is interrupted. Inspect both the scenario step and teardown errors. Keep the generated ID or email to look up the affected records.
+
+## Add or diagnose a DB test
+
+1. For SQL alone, import `test` and `expect` from `@playwright/test`, as in the connection test. For a customer journey, import them from [dbFixtures.ts](../../fixtures/dbFixtures.ts) and request `customerData` or `registeredCustomer`. That module also provides the [page fixtures](../../fixtures/pageFixtures.ts).
+2. Perform the user action through the storefront or [Admin](../../pages/AdminCustomersPage.ts). Clear cookies and sign in again when checking a changed status or password. In SQL, locate the generated row by email or captured ID. Check the row count before comparing fields and pass values as `?` parameters.
+3. Establish the state that the action must change. The deletion scenario requires an `oc_customer_ip` row before the Admin action. For other child tables it checks only final absence. The installed Admin deletion leaves `oc_customer_online` cleanup to the fixture. Seed and verify a child row first if its removal matters to the new test.
+4. `getCustomersByEmail` returns ID, names, email, telephone, status and date. A change limited to the stored password can escape the duplicate-email comparison. For password behavior, assert a boolean comparison in memory and exercise a fresh login. The password-change scenario checks that storage changed and differs from plaintext. See COV-01 in [known issues](../../docs/KNOWN_ISSUES.md).
+5. Add the suite tags in the title, list the file for one browser, then run it on the verified target. Extend the ID-scoped teardown whenever a new scenario owns records in another table.

@@ -11,11 +11,11 @@ source links below when changing a setting or reconciling conflicting text.
 
 | Reader / task | Route |
 | --- | --- |
-| New contributor or reviewer | [Overview](../README.md) → [architecture](ARCHITECTURE.md) → [testing](TESTING.md) |
+| New contributor or reviewer | [Overview](../README.md) → [development guide](DEVELOPMENT.md) → [architecture](ARCHITECTURE.md) and [testing](TESTING.md) |
 | Agent starting a task | [AGENTS.md](../AGENTS.md) → this index → the relevant guide and owning source files |
 | Existing local environment | [Configuration](CONFIGURATION.md) → [local Docker guide](../docker/README.md) → [testing](TESTING.md) |
 | Reproducible full stack / CI | [CI setup](CI.md), including [full local Docker mode](CI.md#full-docker-desktop-stack) |
-| Failed run or report inspection | [Testing](TESTING.md) → [reporting](TESTING.md#docker-ci-and-reports) → the relevant suite README |
+| Failed run or report inspection | [Reports and Allure](REPORTS.md) → the relevant suite README or [known issues](KNOWN_ISSUES.md) |
 | New test scenario | [Contributing](../CONTRIBUTING.md) → [prompt catalog](../prompts/README.md) → suite README and existing code |
 
 ## Maintained guides
@@ -25,12 +25,14 @@ source links below when changing a setting or reconciling conflicting text.
 | [Root README](../README.md) | Project purpose, onboarding, and first commands |
 | [AGENTS.md](../AGENTS.md) | Repository rules and an agent's reading / verification workflow |
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | Change workflow, validation expectations, and documentation maintenance |
+| [Development](DEVELOPMENT.md) | Trace a command through the stack, choose an owning layer and safely reproduce a case on the host |
+| [Known issues](KNOWN_ISSUES.md) | Defects and coverage gaps, with evidence, workarounds and acceptance criteria |
 | [Architecture](ARCHITECTURE.md) | Directory / component map, fixtures, page objects, and data flow |
 | [Configuration](CONFIGURATION.md) | Environment variables, precedence, runtime modes, and address boundaries |
 | [Testing](TESTING.md) | Suite selection, tags, browser projects, prerequisites, and verification limits |
 | [Local Docker](../docker/README.md) | Existing OpenCart/MySQL container lifecycle and initialization |
 | [CI and full Docker stack](CI.md) | GitHub settings, workflow, test image, isolated local stack, and CI artifacts |
-| [Reporting](TESTING.md#docker-ci-and-reports) | Current HTML/JUnit paths and viewing, raw Allure results, and the separate generator guide |
+| [Reporting](REPORTS.md) | HTML/JUnit, private captures, local Allure history, downloadable CI artifacts and public Pages reports |
 | [Web suite](../tests/web/README.md) | Storefront scenarios, reusable customer, and web-specific conventions |
 | [API suite](../tests/api/README.md) | Contract coverage, fixtures, and public FakeStore behavior assumptions |
 | [DB suite](../tests/db/README.md) | MySQL and UI/admin/DB scenarios, privileges, state changes, and cleanup |
@@ -53,7 +55,7 @@ source links below when changing a setting or reconciling conflicting text.
 | Containerized test execution | [test Compose overlay](../docker-compose.test.yml), [test Dockerfile](../docker/playwright/Dockerfile), [Docker runner](../scripts/ci/run-tests-in-docker.sh) |
 | Isolated local stack and its private configuration | [local-docker.mjs](../scripts/ci/local-docker.mjs) |
 | CI triggers, repository settings, uploaded artifacts, cleanup | [workflow](../.github/workflows/playwright.yml), [environment validator](../scripts/ci/validate-env.mjs) |
-| Separate local Allure implementation | [Report guide](https://github.com/gurevmark/opencart-playwright-framework/blob/a299c994ce375dcddf3f86116a88ff2fd9f7187c/docs/REPORTS.md), [Compose](https://github.com/gurevmark/opencart-playwright-framework/blob/a299c994ce375dcddf3f86116a88ff2fd9f7187c/docker-compose.allure.yml), [helper](https://github.com/gurevmark/opencart-playwright-framework/blob/a299c994ce375dcddf3f86116a88ff2fd9f7187c/scripts/allure.mjs); delivered independently of this documentation branch |
+| Local Allure and CI artifact writers | [Report guide](REPORTS.md), [Compose service](../docker-compose.allure.yml), [Allure helper](../scripts/allure.mjs), [configured reporters](../scripts/ci/reporters/) and [CI artifact verifier](../scripts/ci/verify-report-privacy.py) |
 | Files excluded from Git / test images | [.gitignore](../.gitignore), [root .dockerignore](../.dockerignore), [service .dockerignore](../docker/fakestore/.dockerignore) |
 
 ## Requirements, tooling references, and history
@@ -72,7 +74,7 @@ prerequisite for running the framework through its shell runner.
 Implementation records live in [docs/superpowers/plans/](superpowers/plans/):
 
 - [Container CI plan](superpowers/plans/2026-11-04-playwright-container-ci.md).
-- [Local Allure plan](https://github.com/gurevmark/opencart-playwright-framework/blob/a299c994ce375dcddf3f86116a88ff2fd9f7187c/docs/superpowers/plans/2026-11-04-local-allure.md) in the separate Allure change.
+- [Local Allure plan](superpowers/plans/2026-11-04-local-allure.md).
 
 Plans, checked boxes, dated suite verification sections, and CI acceptance notes are
 historical evidence. They are not instructions to rerun completed work or proof of
