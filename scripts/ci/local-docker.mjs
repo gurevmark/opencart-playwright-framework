@@ -4,6 +4,7 @@ import { devNull } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import paths from './reporters/paths.cjs';
 
 const project = 'opencart-local-ci';
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -100,7 +101,9 @@ function main() {
   if (action === 'stop') return docker(['stop']);
   if (action === 'down') return docker(['down', '--remove-orphans']);
 
-  for (const directory of ['reports/local-docker', 'allure-results/local-docker', 'test-results/local-docker']) {
+  const directories = ['reports/local-docker', 'allure-results/local-docker', 'test-results/local-docker'];
+  paths.verifyDockerMounts(...directories.map(directory => path.join(root, directory)), root);
+  for (const directory of directories) {
     mkdirSync(path.join(root, directory), { recursive: true });
   }
   if (action === 'test') {

@@ -1,8 +1,9 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { devNull } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import verified from './ci/reporters/verified-allure.cjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const serviceUrl = 'http://127.0.0.1:5051/allure-docker-service';
@@ -39,10 +40,16 @@ async function main() {
   }
 
   const reportUrl = `${serviceUrl}/projects/${project}/reports/latest/index.html`;
+  const directory = path.join(root, projects[project]);
+  const reports = path.join(root, 'allure-report', project);
+  const stamp = path.join(reports, '.verified-history-v1');
+  const history = verified.historyDigest(directory, reports);
+  if (existsSync(stamp) ? readFileSync(stamp, 'utf8') !== history :
+      history || (existsSync(reports) && readdirSync(reports).length)) {
+    throw new Error('Unverified local Allure history. Remove legacy input history, executor.json and generated reports for this project.');
+  }
   if (action === 'generate') {
-    const directory = path.join(root, projects[project]);
-    const hasResults = existsSync(directory) && readdirSync(directory, { withFileTypes: true })
-      .some(entry => entry.isFile() && entry.name.endsWith('-result.json'));
+    const hasResults = existsSync(directory) && verified.verifiedResults(directory, project);
     if (!hasResults) throw new Error(`No Allure test results in ${projects[project]}. Run tests first.`);
 
     let response;
@@ -53,7 +60,8 @@ async function main() {
     } catch (error) {
       throw new Error(`Cannot reach Allure or generation timed out (${error.message}). Check npm run allure:status; start with npm run allure:up.`);
     }
-    if (!response.ok) throw new Error(`Allure returned HTTP ${response.status}: ${await response.text()}`);
+    if (!response.ok) throw new Error(`Allure returned HTTP ${response.status}.`);
+    writeFileSync(stamp, verified.historyDigest(directory, reports));
   }
 
   console.log(`Allure (${project}): ${reportUrl}`);

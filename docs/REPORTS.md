@@ -1,4 +1,67 @@
-# Local test reports
+# Test reports
+
+## Open a CI report
+
+Open the workflow run's **Summary** and click **Открыть Allure-отчёт**. The link
+appears after GitHub Pages deploys the report and CI retrieves and verifies the
+published HTML. It opens directly in a browser. The URL contains the run ID and
+the attempt that produced the test results, for example `runs/12345/2/index.html`.
+
+| Run | Browser-ready Allure HTML |
+| --- | --- |
+| Push to `main` or manual run on the `main` branch | Pages link in Summary and an `allure-html-<run>-<attempt>` artifact |
+| Same-repository PR or manual run on another ref | `allure-preview-<run>-<attempt>` artifact in Actions |
+| Fork PR or Dependabot | The secret-dependent tests are skipped |
+
+A failed test still produces a report when Playwright writes a result. The
+test job and the overall run stay red. Cancellation or missing results skip
+publication. A failed deployment produces no Summary link.
+
+The Pages home lists up to ten attempts. Each deployment includes the current
+attempt and the nine newest other eligible HTML artifacts still available.
+The HTML artifacts expire after 30 days. The site is pruned on the next
+deployment, so an evicted Summary URL returns 404. It never points to a newer
+run. The two original diagnostic artifacts retain their seven-day lifetime.
+
+### What is public
+
+The page shows test names, suite files and tags from credential-free Playwright
+discovery, plus statuses, retries and timing from the matching results.
+Unrecognized cases receive numbered names. Public reports omit attachments,
+Playwright steps, submitted values, error text, stacks, host labels and executor
+metadata. For the test author's named steps, retries and failure location, open
+`playwright-report` or `allure-results` in Actions. These files are downloadable
+by signed-in readers of this public repository.
+
+The configured reporter builds the three downloadable formats from a filtered
+event stream. It drops low-level browser actions (including form values),
+attachments, stdout/stderr, page snapshots and assertion payloads. It redacts
+configured credentials from retained names. CI opens the ZIP inside the
+Playwright HTML and checks its JSON, the JUnit XML and raw Allure JSON before
+either artifact can be uploaded. A failed privacy check blocks both uploads.
+
+Reports generated with the previous reporter can contain the OpenCart customer
+and administrator credentials. Rotate exposed values and remove affected copies,
+including local Allure history and downloaded ZIPs, before generating reports
+from an existing results directory. Keep `test-results/` private.
+
+The local generator accepts the reporter's `safe-<sha256>-result.json` and
+`safe-<sha256>-container.json` files and verifies their contents. It rejects
+legacy attachments and changed history. On an existing installation, clear
+only the affected project's old input files, input `history/`, `executor.json`
+and generated `allure-report/<project>/` contents before the first safe run.
+Keep the mount directories themselves. The `host` input also contains the
+independent `local-docker/` directory.
+
+CI generates a single HTML file with the SHA-256-verified Allure 2.46.1 CLI
+and the hosted runner's Java runtime. The existing `allure-playwright` adapter
+produces compatible results. The report displays its run and attempt and uses
+[Allure's analytics opt-out](https://github.com/allure-framework/allure2/blob/2.46.1/Analytics.md#opting-out).
+The local Docker service displays the filtered Allure results and their history. See the
+[CI setup and failure check](CI.md#github-pages-deployment) and the
+[Allure 2 release](https://github.com/allure-framework/allure2/releases/tag/2.46.1).
+
+## Local reports
 
 The configured Playwright reporters already produce three formats:
 
@@ -8,8 +71,7 @@ The configured Playwright reporters already produce three formats:
 | JUnit XML | `reports/results.xml` | `reports/local-docker/results.xml` | An XML viewer or test-result importer |
 | Allure raw results | `allure-results/` | `allure-results/local-docker/` | Generate an Allure report using the service below |
 
-Allure results are the reporter's JSON and attachments; they are not yet a
-viewable HTML report. Docker supplies the Allure generator and HTTP server, so
+The Allure input consists of filtered JSON files. Docker supplies the generator and HTTP server, so
 Java and the Allure CLI do not need to be installed on the Mac.
 
 ## Start the local Allure service
@@ -89,10 +151,10 @@ source's top-level raw files **before** starting tests:
 
 ```sh
 # Host-side results only; preserves nested Docker results and history directories.
-find allure-results -maxdepth 1 -type f -delete
+find allure-results -maxdepth 1 -type f -name 'safe-*.json' -delete
 
 # Or, for a local Docker run only:
-find allure-results/local-docker -maxdepth 1 -type f -delete
+find allure-results/local-docker -maxdepth 1 -type f -name 'safe-*.json' -delete
 ```
 
 Choose one command for the run you are about to execute. Do not recursively
@@ -117,5 +179,3 @@ docker compose --env-file /dev/null -p opencart-allure -f docker-compose.allure.
 ```
 
 If port 5051 is occupied, identify the owner before starting this service.
-Report publishing and history on CI are a separate follow-up; this Compose
-file and the npm commands are local only.

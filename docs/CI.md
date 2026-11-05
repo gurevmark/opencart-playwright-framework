@@ -6,7 +6,7 @@ tests** and **67 FakeStore API tests against a controlled compatibility fork**.
 The API result describes the
 controlled service, not the public `https://fakestoreapi.com` deployment.
 
-The runner uses Node only for configuration checks and reading the lockfile.
+The test job uses Node for configuration checks and reading the lockfile.
 It builds the test image and starts four application/database containers:
 
 | Application | Database | Address inside the test container |
@@ -49,8 +49,8 @@ helpers before the separate step that runs the Playwright Web/API/DB suite.
 
 The workflow runs on pushes and pull requests targeting `main`, and from
 **Actions → Playwright Web, API and DB Tests → Run workflow**. Fork pull requests
-and Dependabot runs skip the secret-dependent job. A GitHub Environment is not
-required; configuration is repository-scoped.
+and Dependabot runs skip the secret-dependent job. Test configuration is
+repository-scoped. Pages publication uses the `github-pages` environment.
 
 ## Playwright image and build cache
 
@@ -180,20 +180,53 @@ suite with its existing assertions, browser configuration, and reporters.
 | `test:web` | `@web`, including browser-based DB journeys |
 | `test:db` | `@db` |
 | `test:datadriven` | `@datadriven` |
+| `verify:allure-failure` | Manual acceptance check that intentionally fails one product-limit assertion |
 
 Automatic runs use Chromium. Manual runs also offer Firefox and WebKit. Tags are
 selected on the command rather than through a global Playwright filter. Full CI
 always provisions the complete stack, including when a smaller suite is selected.
 
-Configured reporters produce HTML/JUnit under `reports/` and Allure results under
-`allure-results/`. CI uploads both after successful or failed Playwright runs,
-with seven-day retention. Reports/traces can contain submitted CI credentials and
-synthetic data; GitHub log masking does not sanitize artifact contents. Restrict
-artifact access appropriately and use only dedicated disposable test identities.
+The reporter writes Playwright HTML/JUnit under `reports/` and Allure JSON under
+`allure-results/`. CI requires fresh output directories, tests the reporter with
+a deliberate failure and retry, then checks for the completion marker and scans
+both artifacts with the four configured OpenCart credential values. Passing
+and failing test runs can both upload the checked files for seven days.
+Traces, screenshots and other files from `test-results/` stay out of both
+artifacts. GitHub log masking applies to the job log only.
 
 Every run uses an `opencart-ci-<run>-<attempt>` Compose project with fresh volumes.
 Cleanup uses both Compose files and removes only that run's project and volumes.
 It must never be run against the existing local `framework1-opencart` project.
+
+## GitHub Pages deployment
+
+In **Settings → Pages → Build and deployment**, set **Source** to **GitHub
+Actions**. Under **Settings → Environments → github-pages**, allow deployments
+from the `main` branch. The workflow publishes on pushes to `main` and manual
+runs on that branch. All PRs and other refs are excluded from deployment.
+
+If Actions was paused for credential rotation, first merge the reporter and
+upload checks into `main`. Then select **Actions → Playwright Web, API and DB
+Tests → Enable workflow** before running the acceptance checks below.
+
+The read-only `report` job downloads the test job's raw artifact by ID, lists
+the checked-out tests without application secrets, and generates a sanitized
+Allure 2 HTML file. It runs after failed tests when raw results exist.
+Only `publish` has `pages: write` and `id-token: write`. It uses `contents: read`
+for the assembly script and `actions: read` for archived HTML. It verifies each
+historical artifact's repository, workflow, event and run ID, and checks that its
+commit belongs to the history of `main`.
+Publications queue while tests can run concurrently. After deployment, CI
+compares the live file with the packaged file before adding the run-specific
+link to Summary. See [report contents and retention](REPORTS.md#open-a-ci-report)
+and [GitHub's Pages workflow requirements](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+
+To check both outcomes, manually run `test:master` and then
+`verify:allure-failure` on `main`. The latter requests 999 products from the
+small fixture catalog and runs one existing assertion with retries disabled.
+Expect a failed `test` job, successful `report` and `publish` jobs, and one failed
+test in the linked Allure report. Reopen the first Summary link to verify it
+still displays the original passing run.
 
 ## Local use
 
@@ -313,6 +346,5 @@ removed; the four local full-stack services remain running and healthy.
 
 The npm dependency layer was reused (`CACHED`) during these builds. An earlier
 isolated source-only probe also confirmed fresh test code with the npm layer
-cached and a sentinel `.env` absent from the image. The exact hosted Linux AMD64
-job and GitHub cache export/restore still require an Actions run after publication.
-No registry publication or hosted run was performed during local acceptance.
+cached and a sentinel `.env` absent from the image. All 94 tests subsequently
+passed on the hosted Docker runner in [the baseline run before Pages publication](https://github.com/gurevmark/opencart-playwright-framework/actions/runs/41902002814).

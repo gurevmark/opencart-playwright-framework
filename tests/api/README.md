@@ -72,5 +72,6 @@ Validation on 2026-11-03: all 67 tests passed against the configured live API wi
 two workers using the existing `chromium` project (no browser was launched).
 Strict TypeScript checking passed using an existing cached compiler; this project does
 not currently declare a `typescript` dependency, so plain `npx tsc` is not reliable here.
-The verification run used `--reporter=list --output=/tmp/fakestore-api-extended-results` to preserve
-existing report files. Normal runs use the project's configured reporters.
+That historical validation used a console reporter. Current runs use the
+project's configured credential-safe reporters. Use a separate checkout to
+keep independent copies of the HTML/JUnit and Allure results.
